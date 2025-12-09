@@ -18,6 +18,7 @@ import {
   ArrowUpRight,
   ChevronDown,
   X,
+  Network,
 } from "lucide-react";
 
 interface UnifiedGraphProps {
@@ -543,6 +544,19 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
 
   return (
     <div className="flex flex-col h-[calc(100vh-85px)] gap-4">
+      {/* Header */}
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <Network className="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-white">Interactive Graph</h2>
+          <p className="text-slate-400 text-sm">
+            Visualize transaction relationships and network topology
+          </p>
+        </div>
+      </div>
+
       {/* --- Toolbar --- */}
       <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800 flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center z-20 shadow-sm shrink-0">
         <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto">

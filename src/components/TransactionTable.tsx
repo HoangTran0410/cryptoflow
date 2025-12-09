@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Transaction } from "../types";
-import { ChevronDown, ChevronUp, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Search, Wallet } from "lucide-react";
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -76,103 +76,117 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   };
 
   return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden flex flex-col h-[700px]">
-      <div className="p-5 border-b border-slate-800 flex flex-col md:flex-row justify-between md:items-center gap-4 shrink-0">
-        <h3 className="text-lg font-semibold text-white">
-          Transaction Ledger ({filteredData.length.toLocaleString()})
-        </h3>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search address or ID..."
-            className="bg-slate-950 border border-slate-700 text-slate-200 pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 w-full md:w-64"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
+    <div className="flex flex-col h-[700px] gap-4">
+      {/* Header */}
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
+          <Wallet className="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-white">Ledger</h2>
+          <p className="text-slate-400 text-sm">
+            Full history of all processed transactions
+          </p>
         </div>
       </div>
-
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="bg-slate-950/50 text-slate-200 font-medium uppercase text-xs border-b border-slate-800 flex shrink-0 pr-4">
-          {/* pr-4 accounts for scrollbar width approx */}
-          <div
-            className="flex-1 px-6 py-4 cursor-pointer hover:bg-slate-800/50 flex items-center gap-1"
-            onClick={() => handleSort("date")}
-          >
-            Date <SortIcon field="date" />
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden flex flex-col h-full">
+        <div className="p-5 border-b border-slate-800 flex flex-col md:flex-row justify-between md:items-center gap-4 shrink-0">
+          <h3 className="text-lg font-semibold text-white">
+            Transaction Ledger ({filteredData.length.toLocaleString()})
+          </h3>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Search address or ID..."
+              className="bg-slate-950 border border-slate-700 text-slate-200 pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 w-full md:w-64"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
           </div>
-          <div
-            className="flex-[2] px-6 py-4 cursor-pointer hover:bg-slate-800/50 flex items-center gap-1"
-            onClick={() => handleSort("from")}
-          >
-            From <SortIcon field="from" />
-          </div>
-          <div
-            className="flex-[2] px-6 py-4 cursor-pointer hover:bg-slate-800/50 flex items-center gap-1"
-            onClick={() => handleSort("to")}
-          >
-            To <SortIcon field="to" />
-          </div>
-          <div
-            className="flex-1 px-6 py-4 cursor-pointer hover:bg-slate-800/50 flex items-center justify-end gap-1"
-            onClick={() => handleSort("amount")}
-          >
-            Amount <SortIcon field="amount" />
-          </div>
-          <div className="flex-1 px-6 py-4 text-right">Currency</div>
         </div>
 
-        {/* Virtual List Container */}
-        <div
-          ref={scrollContainerRef}
-          className="overflow-y-auto flex-1 custom-scrollbar relative"
-          onScroll={handleScroll}
-        >
-          {/* Spacer to simulate full height */}
-          <div style={{ height: totalHeight, position: "relative" }}>
-            {/* Rendered Items Positioned Absolutely or Relatively with Offset */}
-            <div style={{ transform: `translateY(${offsetY}px)` }}>
-              {visibleItems.map((tx) => (
-                <div
-                  key={tx.id}
-                  className="flex border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors h-[48px] items-center text-sm"
-                >
-                  <div className="flex-1 px-6 whitespace-nowrap text-slate-300">
-                    {tx.date.toLocaleDateString()}
-                  </div>
-                  <div className="flex-[2] px-6 truncate" title={tx.from}>
-                    <span className="px-2 py-1 rounded text-xs font-mono bg-slate-800 border border-slate-700 text-slate-300">
-                      {tx.from}
-                    </span>
-                  </div>
-                  <div className="flex-[2] px-6 truncate" title={tx.to}>
-                    <span className="px-2 py-1 rounded text-xs font-mono bg-slate-800 border border-slate-700 text-slate-300">
-                      {tx.to}
-                    </span>
-                  </div>
-                  <div className="flex-1 px-6 text-right font-medium text-emerald-400">
-                    {tx.amount.toLocaleString()}
-                  </div>
-                  <div className="flex-1 px-6 text-right text-slate-500">
-                    {tx.currency}
-                  </div>
-                </div>
-              ))}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="bg-slate-950/50 text-slate-200 font-medium uppercase text-xs border-b border-slate-800 flex shrink-0 pr-4">
+            {/* pr-4 accounts for scrollbar width approx */}
+            <div
+              className="flex-1 px-6 py-4 cursor-pointer hover:bg-slate-800/50 flex items-center gap-1"
+              onClick={() => handleSort("date")}
+            >
+              Date <SortIcon field="date" />
             </div>
+            <div
+              className="flex-[2] px-6 py-4 cursor-pointer hover:bg-slate-800/50 flex items-center gap-1"
+              onClick={() => handleSort("from")}
+            >
+              From <SortIcon field="from" />
+            </div>
+            <div
+              className="flex-[2] px-6 py-4 cursor-pointer hover:bg-slate-800/50 flex items-center gap-1"
+              onClick={() => handleSort("to")}
+            >
+              To <SortIcon field="to" />
+            </div>
+            <div
+              className="flex-1 px-6 py-4 cursor-pointer hover:bg-slate-800/50 flex items-center justify-end gap-1"
+              onClick={() => handleSort("amount")}
+            >
+              Amount <SortIcon field="amount" />
+            </div>
+            <div className="flex-1 px-6 py-4 text-right">Currency</div>
           </div>
 
-          {filteredData.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center text-slate-500">
-              No transactions found matching your filter.
+          {/* Virtual List Container */}
+          <div
+            ref={scrollContainerRef}
+            className="overflow-y-auto flex-1 custom-scrollbar relative"
+            onScroll={handleScroll}
+          >
+            {/* Spacer to simulate full height */}
+            <div style={{ height: totalHeight, position: "relative" }}>
+              {/* Rendered Items Positioned Absolutely or Relatively with Offset */}
+              <div style={{ transform: `translateY(${offsetY}px)` }}>
+                {visibleItems.map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="flex border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors h-[48px] items-center text-sm"
+                  >
+                    <div className="flex-1 px-6 whitespace-nowrap text-slate-300">
+                      {tx.date.toLocaleDateString()}
+                    </div>
+                    <div className="flex-[2] px-6 truncate" title={tx.from}>
+                      <span className="px-2 py-1 rounded text-xs font-mono bg-slate-800 border border-slate-700 text-slate-300">
+                        {tx.from}
+                      </span>
+                    </div>
+                    <div className="flex-[2] px-6 truncate" title={tx.to}>
+                      <span className="px-2 py-1 rounded text-xs font-mono bg-slate-800 border border-slate-700 text-slate-300">
+                        {tx.to}
+                      </span>
+                    </div>
+                    <div className="flex-1 px-6 text-right font-medium text-emerald-400">
+                      {tx.amount.toLocaleString()}
+                    </div>
+                    <div className="flex-1 px-6 text-right text-slate-500">
+                      {tx.currency}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          )}
-        </div>
-      </div>
 
-      <div className="p-3 text-center text-xs text-slate-500 border-t border-slate-800 shrink-0 bg-slate-900">
-        Showing {filteredData.length.toLocaleString()} transactions
+            {filteredData.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center text-slate-500">
+                No transactions found matching your filter.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-3 text-center text-xs text-slate-500 border-t border-slate-800 shrink-0 bg-slate-900">
+          Showing {filteredData.length.toLocaleString()} transactions
+        </div>
       </div>
     </div>
   );

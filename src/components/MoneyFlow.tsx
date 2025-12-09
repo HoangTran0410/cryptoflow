@@ -64,6 +64,19 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
 
   return (
     <div className="flex flex-col h-full gap-6">
+      {/* Header */}
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          <TrendingUp className="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-white">Money Flow Analysis</h2>
+          <p className="text-slate-400 text-sm">
+            Aggregated wallet statistics and transfer corridor rankings
+          </p>
+        </div>
+      </div>
+
       {/* Sub Tab Navigation */}
       <div className="flex justify-center">
         <div className="bg-slate-900 p-1 rounded-xl border border-slate-800 inline-flex">

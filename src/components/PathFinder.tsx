@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
-import { Transaction, PathFinderResult, TransactionPath } from '../types';
-import { useForensicsWorker } from '../hooks/useForensicsWorker';
-import { pathFinderCache, generateCacheKey } from '../utils/cache';
-import { exportData } from '../utils/export';
-import LoadingSpinner from './shared/LoadingSpinner';
-import DepthSlider from './shared/DepthSlider';
-import ExportButton from './shared/ExportButton';
-import SeverityBadge from './shared/SeverityBadge';
-import { Search, Star, ArrowRight, Clock, TrendingUp } from 'lucide-react';
+import React, { useState } from "react";
+import { Transaction, PathFinderResult, TransactionPath } from "../types";
+import { useForensicsWorker } from "../hooks/useForensicsWorker";
+import { pathFinderCache, generateCacheKey } from "../utils/cache";
+import { exportData } from "../utils/export";
+import LoadingSpinner from "./shared/LoadingSpinner";
+import DepthSlider from "./shared/DepthSlider";
+import ExportButton from "./shared/ExportButton";
+import SeverityBadge from "./shared/SeverityBadge";
+import {
+  Search,
+  Star,
+  ArrowRight,
+  Clock,
+  TrendingUp,
+  Route,
+} from "lucide-react";
 
 interface PathFinderProps {
   transactions: Transaction[];
@@ -15,11 +22,13 @@ interface PathFinderProps {
 
 const PathFinder: React.FC<PathFinderProps> = ({ transactions }) => {
   const { executeTask, isReady } = useForensicsWorker();
-  const [sourceAddress, setSourceAddress] = useState('');
-  const [targetAddress, setTargetAddress] = useState('');
+  const [sourceAddress, setSourceAddress] = useState("");
+  const [targetAddress, setTargetAddress] = useState("");
   const [maxDepth, setMaxDepth] = useState(10);
   const [result, setResult] = useState<PathFinderResult | null>(null);
-  const [selectedPath, setSelectedPath] = useState<TransactionPath | null>(null);
+  const [selectedPath, setSelectedPath] = useState<TransactionPath | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(false);
 
   const handleFindPaths = async () => {
@@ -27,12 +36,16 @@ const PathFinder: React.FC<PathFinderProps> = ({ transactions }) => {
 
     setIsLoading(true);
 
-    const cacheKey = generateCacheKey('pathFinder', { sourceAddress, targetAddress, maxDepth });
+    const cacheKey = generateCacheKey("pathFinder", {
+      sourceAddress,
+      targetAddress,
+      maxDepth,
+    });
     let pathResult = pathFinderCache.get(cacheKey);
 
     if (!pathResult) {
       pathResult = await executeTask<PathFinderResult>({
-        type: 'FIND_PATHS',
+        type: "FIND_PATHS",
         payload: {
           transactions,
           source: sourceAddress,
@@ -53,21 +66,36 @@ const PathFinder: React.FC<PathFinderProps> = ({ transactions }) => {
     setIsLoading(false);
   };
 
-  const handleExport = (format: 'csv' | 'json') => {
+  const handleExport = (format: "csv" | "json") => {
     if (result) {
-      exportData(result.paths, 'paths');
+      exportData(result.paths, "paths");
     }
   };
 
-  const getSeverity = (score: number): 'low' | 'medium' | 'high' | 'critical' => {
-    if (score >= 80) return 'critical';
-    if (score >= 60) return 'high';
-    if (score >= 40) return 'medium';
-    return 'low';
+  const getSeverity = (
+    score: number
+  ): "low" | "medium" | "high" | "critical" => {
+    if (score >= 80) return "critical";
+    if (score >= 60) return "high";
+    if (score >= 40) return "medium";
+    return "low";
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          <Route className="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-white">Path Finder</h2>
+          <p className="text-slate-400 text-sm">
+            Find all paths connecting two addresses
+          </p>
+        </div>
+      </div>
+
       {/* Controls */}
       <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -98,7 +126,13 @@ const PathFinder: React.FC<PathFinderProps> = ({ transactions }) => {
           </div>
         </div>
 
-        <DepthSlider value={maxDepth} onChange={setMaxDepth} min={2} max={15} label="Maximum Path Depth" />
+        <DepthSlider
+          value={maxDepth}
+          onChange={setMaxDepth}
+          min={2}
+          max={15}
+          label="Maximum Path Depth"
+        />
 
         <div className="flex gap-3">
           <button
@@ -107,16 +141,18 @@ const PathFinder: React.FC<PathFinderProps> = ({ transactions }) => {
             className="flex-1 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
           >
             <Search className="w-4 h-4" />
-            {isLoading ? 'Searching...' : 'Find Paths'}
+            {isLoading ? "Searching..." : "Find Paths"}
           </button>
           {result && result.paths.length > 0 && (
-            <ExportButton onExport={handleExport} formats={['csv', 'json']} />
+            <ExportButton onExport={handleExport} formats={["csv", "json"]} />
           )}
         </div>
       </div>
 
       {/* Results */}
-      {isLoading && <LoadingSpinner message="Finding paths between addresses..." />}
+      {isLoading && (
+        <LoadingSpinner message="Finding paths between addresses..." />
+      )}
 
       {result && !isLoading && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -146,12 +182,14 @@ const PathFinder: React.FC<PathFinderProps> = ({ transactions }) => {
                       onClick={() => setSelectedPath(path)}
                       className={`w-full text-left p-3 rounded-lg border transition-all ${
                         selectedPath === path
-                          ? 'bg-indigo-900/30 border-indigo-500'
-                          : 'bg-slate-800/30 border-slate-700 hover:border-slate-600'
+                          ? "bg-indigo-900/30 border-indigo-500"
+                          : "bg-slate-800/30 border-slate-700 hover:border-slate-600"
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-slate-400 text-xs">Path #{idx + 1}</span>
+                        <span className="text-slate-400 text-xs">
+                          Path #{idx + 1}
+                        </span>
                         {path === result.shortestPath && (
                           <div className="flex items-center gap-1 text-yellow-400 text-xs">
                             <Star className="w-3 h-3 fill-current" />
@@ -192,18 +230,27 @@ const PathFinder: React.FC<PathFinderProps> = ({ transactions }) => {
                 <div className="grid grid-cols-4 gap-3">
                   <div className="bg-slate-800/50 rounded-lg p-3">
                     <p className="text-slate-500 text-xs mb-1">Hops</p>
-                    <p className="text-white text-xl font-bold">{selectedPath.hops}</p>
+                    <p className="text-white text-xl font-bold">
+                      {selectedPath.hops}
+                    </p>
                   </div>
                   <div className="bg-slate-800/50 rounded-lg p-3">
                     <p className="text-slate-500 text-xs mb-1">Total Amount</p>
                     <p className="text-white text-xl font-bold">
-                      {selectedPath.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      {selectedPath.totalAmount.toLocaleString(undefined, {
+                        maximumFractionDigits: 0,
+                      })}
                     </p>
                   </div>
                   <div className="bg-slate-800/50 rounded-lg p-3">
                     <p className="text-slate-500 text-xs mb-1">Duration</p>
                     <p className="text-white text-xl font-bold">
-                      {((selectedPath.endDate.getTime() - selectedPath.startDate.getTime()) / (1000 * 60 * 60)).toFixed(0)}h
+                      {(
+                        (selectedPath.endDate.getTime() -
+                          selectedPath.startDate.getTime()) /
+                        (1000 * 60 * 60)
+                      ).toFixed(0)}
+                      h
                     </p>
                   </div>
                   <div className="bg-slate-800/50 rounded-lg p-3">
@@ -216,15 +263,22 @@ const PathFinder: React.FC<PathFinderProps> = ({ transactions }) => {
 
                 {/* Path Visualization */}
                 <div className="bg-slate-950 rounded-lg p-4">
-                  <p className="text-slate-400 text-xs mb-3">Transaction Flow</p>
+                  <p className="text-slate-400 text-xs mb-3">
+                    Transaction Flow
+                  </p>
                   <div className="space-y-2">
                     {selectedPath.addresses.map((addr, idx) => (
                       <div key={idx} className="flex items-center gap-3">
                         <div className="flex-shrink-0 w-8 h-8 bg-indigo-900/50 rounded-full flex items-center justify-center border border-indigo-500/30">
-                          <span className="text-indigo-400 text-xs font-bold">{idx}</span>
+                          <span className="text-indigo-400 text-xs font-bold">
+                            {idx}
+                          </span>
                         </div>
                         <div className="flex-1 bg-slate-800/50 rounded px-3 py-2">
-                          <p className="text-slate-300 font-mono text-xs truncate" title={addr}>
+                          <p
+                            className="text-slate-300 font-mono text-xs truncate"
+                            title={addr}
+                          >
                             {addr}
                           </p>
                         </div>
@@ -238,12 +292,19 @@ const PathFinder: React.FC<PathFinderProps> = ({ transactions }) => {
 
                 {/* Transaction Details */}
                 <div>
-                  <p className="text-slate-400 text-sm font-semibold mb-3">Transactions</p>
+                  <p className="text-slate-400 text-sm font-semibold mb-3">
+                    Transactions
+                  </p>
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {selectedPath.transactions.map((tx, idx) => (
-                      <div key={idx} className="bg-slate-800/30 rounded-lg p-3 text-xs">
+                      <div
+                        key={idx}
+                        className="bg-slate-800/30 rounded-lg p-3 text-xs"
+                      >
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-slate-500">Transaction #{idx + 1}</span>
+                          <span className="text-slate-500">
+                            Transaction #{idx + 1}
+                          </span>
                           <span className="text-white font-semibold">
                             {tx.amount.toLocaleString()} {tx.currency}
                           </span>
