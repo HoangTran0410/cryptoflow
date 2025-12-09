@@ -6,6 +6,11 @@ import ChartsSection from "./components/ChartsSection";
 import TransactionTable from "./components/TransactionTable";
 import MoneyFlow from "./components/MoneyFlow";
 import UnifiedGraph from "./components/UnifiedGraph";
+import ForensicsDashboard from "./components/ForensicsDashboard";
+import PathExplorer from "./components/PathExplorer";
+import PathFinder from "./components/PathFinder";
+import TimelineTracer from "./components/TimelineTracer";
+import TaintChart from "./components/TaintChart";
 import { calculateSummary, getDailyVolume } from "./utils/analytics";
 import {
   LayoutDashboard,
@@ -13,9 +18,23 @@ import {
   Share2,
   TrendingUp,
   Network,
+  Shield,
+  GitBranch,
+  Route,
+  Calendar,
+  Droplet,
 } from "lucide-react";
 
-type Tab = "overview" | "interactive" | "money-flow" | "transactions";
+type Tab =
+  | "overview"
+  | "interactive"
+  | "money-flow"
+  | "forensics"
+  | "path-explorer"
+  | "path-finder"
+  | "timeline"
+  | "taint"
+  | "transactions";
 
 const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -49,6 +68,11 @@ const App: React.FC = () => {
     { id: "overview", label: "Dashboard", icon: LayoutDashboard },
     { id: "interactive", label: "Interactive Graph", icon: Network },
     { id: "money-flow", label: "Money Flow Analysis", icon: TrendingUp },
+    { id: "forensics", label: "Forensics Suite", icon: Shield },
+    { id: "path-explorer", label: "Path Explorer", icon: GitBranch },
+    { id: "path-finder", label: "Path Finder", icon: Route },
+    { id: "timeline", label: "Timeline Tracer", icon: Calendar },
+    { id: "taint", label: "Taint Analysis", icon: Droplet },
     { id: "transactions", label: "Ledger", icon: Wallet },
   ];
 
@@ -168,6 +192,56 @@ const App: React.FC = () => {
             >
               {visitedTabs.has("money-flow") && (
                 <MoneyFlow transactions={transactions} />
+              )}
+            </div>
+
+            {/* Lazy load Forensics Suite */}
+            <div
+              style={{ display: activeTab === "forensics" ? "block" : "none" }}
+              className="h-full"
+            >
+              {visitedTabs.has("forensics") && (
+                <ForensicsDashboard transactions={transactions} />
+              )}
+            </div>
+
+            {/* Lazy load Path Explorer */}
+            <div
+              style={{ display: activeTab === "path-explorer" ? "block" : "none" }}
+              className="h-full"
+            >
+              {visitedTabs.has("path-explorer") && (
+                <PathExplorer transactions={transactions} />
+              )}
+            </div>
+
+            {/* Lazy load Path Finder */}
+            <div
+              style={{ display: activeTab === "path-finder" ? "block" : "none" }}
+              className="h-full"
+            >
+              {visitedTabs.has("path-finder") && (
+                <PathFinder transactions={transactions} />
+              )}
+            </div>
+
+            {/* Lazy load Timeline Tracer */}
+            <div
+              style={{ display: activeTab === "timeline" ? "block" : "none" }}
+              className="h-full"
+            >
+              {visitedTabs.has("timeline") && (
+                <TimelineTracer transactions={transactions} />
+              )}
+            </div>
+
+            {/* Lazy load Taint Analysis */}
+            <div
+              style={{ display: activeTab === "taint" ? "block" : "none" }}
+              className="h-full"
+            >
+              {visitedTabs.has("taint") && (
+                <TaintChart transactions={transactions} />
               )}
             </div>
 
