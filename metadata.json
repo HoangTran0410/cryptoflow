@@ -1,0 +1,5 @@
+{
+  "name": "CryptoFlow Analytics",
+  "description": "A powerful, client-side cryptocurrency transaction visualizer. Upload CSV ledgers to analyze money flow, visualize wallet relationships with D3, and view statistical breakdowns using algorithmic analysis.",
+  "requestFramePermissions": []
+}
