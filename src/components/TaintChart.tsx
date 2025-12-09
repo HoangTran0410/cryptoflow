@@ -86,11 +86,18 @@ const TaintChart: React.FC<TaintChartProps> = ({
       .append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    // Build nodes and links from taint paths
+    // 1. Build Nodes and Aggregate Links
+    // Use a Map to aggregate parallel links between the same source and target
     const nodeMap = new Map<string, SankeyNodeData>();
-    const links: SankeyLinkData[] = [];
+    const linkMap = new Map<
+      string,
+      { source: string; target: string; value: number }
+    >();
 
     taintFlow.paths.forEach((path) => {
+      // Ensure path has at least 2 nodes
+      if (path.path.length < 2) return;
+
       for (let i = 0; i < path.path.length; i++) {
         const addr = path.path[i];
         if (!nodeMap.has(addr)) {
@@ -103,25 +110,117 @@ const TaintChart: React.FC<TaintChartProps> = ({
         if (i < path.path.length - 1) {
           const sourceAddr = path.path[i];
           const targetAddr = path.path[i + 1];
-          const sourceNode = nodeMap.get(sourceAddr)!;
-          const targetNode = nodeMap.get(targetAddr)!;
+          const key = `${sourceAddr}->${targetAddr}`;
 
-          // Calculate proportional taint for this hop
-          const taintAmount = path.taintAmount * (1 / (path.path.length - 1));
-          const percentage =
-            (taintAmount / path.taintAmount) * path.taintPercentage;
+          // Correct logic: The flow on this link is the full path amount
+          // We sum up amounts if multiple paths use the same link
+          const amount = path.amount;
 
-          links.push({
-            source: sourceNode,
-            target: targetNode,
-            value: taintAmount,
-            percentage,
-          } as SankeyLinkData);
+          if (linkMap.has(key)) {
+            linkMap.get(key)!.value += amount;
+          } else {
+            linkMap.set(key, {
+              source: sourceAddr,
+              target: targetAddr,
+              value: amount,
+            });
+          }
         }
       }
     });
 
-    const nodes = Array.from(nodeMap.values());
+    // 2. Cycle Detection and Removal
+    // D3 Sankey crashes on cycles. We must remove back-edges.
+    const nodesArray = Array.from(nodeMap.values());
+    const validLinks: SankeyLinkData[] = [];
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+
+    // Build Adjacency List for DFS
+    const adjacency = new Map<string, string[]>();
+    linkMap.forEach((link, key) => {
+      if (!adjacency.has(link.source)) adjacency.set(link.source, []);
+      adjacency.get(link.source)!.push(link.target);
+    });
+
+    // Helper to check if a link creates a cycle
+    // A simple DFS cycle removal approach:
+    // If we encounter a node that is currently in the recursion stack, it's a back edge.
+    // However, since we have pre-built links, we can just filter the linkMap.
+
+    // Better approach for Sankey:
+    // Only add links that do NOT point back to an ancestor in the current DFS path.
+    // Actually, simply checking if target is in recursionStack during a traversal is enough
+    // provided we traverse the graph structure implied by linkMap.
+
+    // Let's filter the linkMap entries directly.
+    // We will do a full DFS from 'Source' (or all nodes) to define a valid topological order if possible,
+    // or just drop back-edges.
+
+    const isCyclic = (curr: string, target: string, stack: Set<string>) => {
+      if (stack.has(target)) return true; // Back edge
+      return false;
+    };
+
+    // We can't easily run isCyclic on individual links without context.
+    // Instead, let's just use the 'visited' set during graph traversal to build validLinks.
+    // BUT, simply dropping random edges might disconnect important flows.
+    // A standard heuristic is: specific cycles usually come from small loopbacks.
+    // Let's try to keep it simple: any link where (target, source) exists with higher value?
+    // No. The most robust way is BFS/DFS from source and tracking depth.
+    // If target depth <= source depth, it MIGHT be a cycle, but in complex graphs (DAGs) horizontal links are fine.
+    // STRICT CYCLES: If we can reach Source from Target, then adding Source->Target makes a cycle.
+
+    // Pragmantic fix: Maintain a set of "upstream" nodes for each node. (Expensive)
+    // Fast fix: DFS to detect cycles and drop the closing edge.
+
+    const safeLinks = new Set<string>();
+    const dfs = (node: string, stack: Set<string>) => {
+      visited.add(node);
+      stack.add(node);
+
+      const neighbors = adjacency.get(node) || [];
+      neighbors.forEach((next) => {
+        const linkKey = `${node}->${next}`;
+        if (stack.has(next)) {
+          // Detected cycle (Back Edge), skip this link
+          console.warn(`Cycle detected: dropping link ${node} -> ${next}`);
+        } else {
+          safeLinks.add(linkKey);
+          if (!visited.has(next)) {
+            dfs(next, stack);
+          }
+        }
+      });
+
+      stack.delete(node);
+    };
+
+    // Start DFS from the user-selected Source, then any unvisited nodes
+    if (nodeMap.has(source)) {
+      dfs(source, recursionStack);
+    }
+    nodesArray.forEach((n) => {
+      if (!visited.has(n.address)) {
+        dfs(n.address, recursionStack);
+      }
+    });
+
+    // 3. Construct Final Links Array
+    linkMap.forEach((data, key) => {
+      if (safeLinks.has(key)) {
+        validLinks.push({
+          source: nodeMap.get(data.source)!,
+          target: nodeMap.get(data.target)!,
+          value: data.value,
+          percentage: (data.value / taintFlow.totalTainted) * 100, // Approximate % of total taint
+        } as SankeyLinkData);
+      }
+    });
+
+    if (nodesArray.length === 0 || validLinks.length === 0) return;
+
+    const nodes = nodesArray;
 
     // Create Sankey layout
     const sankeyLayout = sankey<SankeyNodeData, SankeyLinkData>()
@@ -134,13 +233,13 @@ const TaintChart: React.FC<TaintChartProps> = ({
 
     const graph = sankeyLayout({
       nodes: nodes.map((d) => ({ ...d })),
-      links: links.map((d) => ({ ...d })),
+      links: validLinks.map((d) => ({ ...d })),
     });
 
     // Color scale
     const colorScale = d3
       .scaleSequential(d3.interpolateViridis)
-      .domain([0, d3.max(links, (d) => d.percentage) || 100]);
+      .domain([0, d3.max(validLinks, (d) => d.percentage) || 100]);
 
     // Draw links
     g.append("g")
@@ -347,7 +446,7 @@ const TaintChart: React.FC<TaintChartProps> = ({
                   Total Taint Amount
                 </p>
                 <p className="text-white text-xl font-bold">
-                  {taintFlow.totalTaintAmount.toLocaleString()}
+                  {taintFlow.totalTainted.toLocaleString()}
                 </p>
               </div>
               <div>
@@ -421,7 +520,7 @@ const TaintChart: React.FC<TaintChartProps> = ({
                     <div className="text-right">
                       <p className="text-slate-500 text-xs">Taint Amount</p>
                       <p className="text-white font-bold">
-                        {path.taintAmount.toLocaleString()}
+                        {path.amount.toLocaleString()}
                       </p>
                     </div>
                   </div>

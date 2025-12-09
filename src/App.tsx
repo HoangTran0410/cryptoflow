@@ -66,14 +66,14 @@ const App: React.FC = () => {
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "overview", label: "Dashboard", icon: LayoutDashboard },
-    { id: "interactive", label: "Interactive Graph", icon: Network },
+    { id: "transactions", label: "Ledger", icon: Wallet },
     { id: "money-flow", label: "Money Flow Analysis", icon: TrendingUp },
-    { id: "forensics", label: "Forensics Suite", icon: Shield },
+    { id: "interactive", label: "Interactive Graph", icon: Network },
     { id: "path-explorer", label: "Path Explorer", icon: GitBranch },
     { id: "path-finder", label: "Path Finder", icon: Route },
     { id: "timeline", label: "Timeline Tracer", icon: Calendar },
     { id: "taint", label: "Taint Analysis", icon: Droplet },
-    { id: "transactions", label: "Ledger", icon: Wallet },
+    { id: "forensics", label: "Forensics Suite", icon: Shield },
   ];
 
   return (
@@ -207,7 +207,9 @@ const App: React.FC = () => {
 
             {/* Lazy load Path Explorer */}
             <div
-              style={{ display: activeTab === "path-explorer" ? "block" : "none" }}
+              style={{
+                display: activeTab === "path-explorer" ? "block" : "none",
+              }}
               className="h-full"
             >
               {visitedTabs.has("path-explorer") && (
@@ -217,7 +219,9 @@ const App: React.FC = () => {
 
             {/* Lazy load Path Finder */}
             <div
-              style={{ display: activeTab === "path-finder" ? "block" : "none" }}
+              style={{
+                display: activeTab === "path-finder" ? "block" : "none",
+              }}
               className="h-full"
             >
               {visitedTabs.has("path-finder") && (

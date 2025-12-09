@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import * as d3 from "d3";
 import { Transaction, DeepTraceResult, DeepTraceConfig } from "../types";
 import { useForensicsWorker } from "../hooks/useForensicsWorker";
@@ -34,7 +34,15 @@ const PathExplorer: React.FC<PathExplorerProps> = ({
   const [result, setResult] = useState<DeepTraceResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleTrace = async () => {
+  // Tooltip state
+  const [tooltip, setTooltip] = useState<{
+    x: number;
+    y: number;
+    data: any;
+  } | null>(null);
+  const tooltipTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const handleTrace = useCallback(async () => {
     if (!address || !isReady) return;
 
     setIsLoading(true);
@@ -64,7 +72,16 @@ const PathExplorer: React.FC<PathExplorerProps> = ({
 
     setResult(traceResult);
     setIsLoading(false);
-  };
+  }, [address, direction, depth, isReady, executeTask, transactions]);
+
+  // Initial trace or address change usually requires manual trigger if we follow standard patterns,
+  // but if we want live update on address typing it would need debounce.
+  // For now, let's keep address manual or trigger on mount (initialAddress).
+  useEffect(() => {
+    if (initialAddress && isReady && !result) {
+      handleTrace();
+    }
+  }, [initialAddress, isReady]);
 
   useEffect(() => {
     if (result && svgRef.current) {
@@ -82,6 +99,18 @@ const PathExplorer: React.FC<PathExplorerProps> = ({
     svg.selectAll("*").remove();
 
     svg.attr("viewBox", [0, 0, width, height]);
+
+    // Add styles for animation
+    svg.append("style").text(`
+      .flow-link {
+        stroke-dasharray: 8 4;
+        animation: flow 1s linear infinite;
+      }
+      @keyframes flow {
+        from { stroke-dashoffset: 12; }
+        to { stroke-dashoffset: 0; }
+      }
+    `);
 
     const g = svg.append("g");
 
@@ -122,9 +151,8 @@ const PathExplorer: React.FC<PathExplorerProps> = ({
           .id((d: any) => d.id)
           .distance(100)
       )
-      .force("charge", d3.forceManyBody().strength(-300))
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collision", d3.forceCollide().radius(30));
+      .force("collision", d3.forceCollide().radius(40));
 
     // Draw links
     const link = g
@@ -132,9 +160,10 @@ const PathExplorer: React.FC<PathExplorerProps> = ({
       .selectAll("line")
       .data(links)
       .join("line")
+      .attr("class", "flow-link")
       .attr("stroke", "#64748b")
-      .attr("stroke-opacity", 0.6)
-      .attr("stroke-width", (d: any) => Math.sqrt(d.value) * 0.1 + 1);
+      .attr("stroke-opacity", 0.6);
+    // .attr("stroke-width", (d: any) => Math.sqrt(d.value) * 0.1 + 1);
 
     // Draw nodes
     const node = g
@@ -163,12 +192,28 @@ const PathExplorer: React.FC<PathExplorerProps> = ({
 
     node
       .append("circle")
-      .attr("r", (d: any) => Math.sqrt(d.totalVolume) * 0.5 + 5)
+      // Logarithmic scaling for radius: Math.log(volume + 1) * scale + base
+      .attr("r", (d: any) => Math.log(d.totalVolume + 1) * 3 + 5)
       .attr("fill", (d: any) =>
         d.address === address ? "#a78bfa" : colorScale(d.depth)
       )
       .attr("stroke", "#fff")
-      .attr("stroke-width", 2);
+      .attr("stroke-width", 2)
+      // Tooltip events
+      .on("mouseover", (event, d) => {
+        if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
+        tooltipTimer.current = setTimeout(() => {
+          setTooltip({
+            x: event.pageX,
+            y: event.pageY,
+            data: d,
+          });
+        }, 200);
+      })
+      .on("mouseout", () => {
+        if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
+        setTooltip(null);
+      });
 
     node
       .append("text")
@@ -202,8 +247,7 @@ const PathExplorer: React.FC<PathExplorerProps> = ({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-6 relative">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
           <GitBranch className="w-6 h-6 text-white" />
@@ -216,25 +260,31 @@ const PathExplorer: React.FC<PathExplorerProps> = ({
         </div>
       </div>
 
-      {/* Controls */}
       <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Address Input */}
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-slate-300 mb-2">
               <Search className="w-4 h-4 inline mr-1" />
               Start Address
             </label>
-            <input
-              type="text"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Enter wallet address..."
-              className="w-full bg-slate-950 border border-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Enter wallet address..."
+                className="flex-1 bg-slate-950 border border-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <button
+                onClick={handleTrace}
+                disabled={!address || isLoading}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition-colors"
+              >
+                Trace
+              </button>
+            </div>
           </div>
 
-          {/* Direction Selector */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
               Direction
@@ -277,32 +327,21 @@ const PathExplorer: React.FC<PathExplorerProps> = ({
           </div>
         </div>
 
-        {/* Depth Slider */}
         <DepthSlider value={depth} onChange={setDepth} min={2} max={20} />
 
-        {/* Action Buttons */}
         <div className="flex gap-3">
-          <button
-            onClick={handleTrace}
-            disabled={!address || isLoading}
-            className="flex-1 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition-colors"
-          >
-            {isLoading ? "Tracing..." : "Trace Transactions"}
-          </button>
           {result && (
             <ExportButton onExport={handleExport} formats={["svg", "png"]} />
           )}
         </div>
       </div>
 
-      {/* Results */}
       {isLoading && (
         <LoadingSpinner message="Tracing multi-hop transactions..." />
       )}
 
       {result && !isLoading && (
         <div className="space-y-4">
-          {/* Statistics */}
           <div className="grid grid-cols-4 gap-4">
             <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
               <p className="text-slate-500 text-xs mb-1">Nodes</p>
@@ -330,21 +369,54 @@ const PathExplorer: React.FC<PathExplorerProps> = ({
             </div>
           </div>
 
-          {/* Graph Visualization */}
-          <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+          <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden relative">
             <svg ref={svgRef} className="w-full" style={{ height: "600px" }} />
           </div>
 
-          {/* Legend */}
           <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
             <p className="text-slate-400 text-sm mb-2">
-              <strong className="text-white">Legend:</strong> Node size =
-              volume, Color = depth from start, Purple = start address
+              <strong className="text-white">Legend:</strong> Node size = volume
+              (log scale), Color = depth from start, Purple = start address,
+              Dotted lines = money flow direction
             </p>
             <p className="text-slate-500 text-xs">
               Drag nodes to rearrange. Scroll to zoom. Click and drag background
-              to pan.
+              to pan. Hover nodes for details (200ms delay).
             </p>
+          </div>
+        </div>
+      )}
+
+      {tooltip && (
+        <div
+          className="fixed z-50 bg-slate-900 border border-slate-700 p-3 rounded-lg shadow-xl text-xs pointer-events-none"
+          style={{
+            left: tooltip.x + 10,
+            top: tooltip.y + 10,
+            maxWidth: "250px",
+          }}
+        >
+          <div className="font-bold text-white mb-1">
+            {tooltip.data.address.slice(0, 10)}...
+            {tooltip.data.address.slice(-8)}
+          </div>
+          <div className="space-y-1">
+            <div className="flex justify-between gap-4">
+              <span className="text-slate-400">Depth:</span>
+              <span className="text-slate-200">{tooltip.data.depth}</span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-slate-400">Volume:</span>
+              <span className="text-slate-200">
+                {tooltip.data.totalVolume?.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-slate-400">Neighbors:</span>
+              <span className="text-slate-200">
+                {tooltip.data.neighbors?.size}
+              </span>
+            </div>
           </div>
         </div>
       )}

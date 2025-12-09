@@ -369,7 +369,7 @@ import {
   SuspiciousPattern,
   AddressCluster,
   TimelineEvent,
-} from '../types';
+} from "../types";
 
 import {
   calculatePathSuspicion,
@@ -379,7 +379,7 @@ import {
   calculateFeatureSimilarity,
   determineCommonBehavior,
   mode,
-} from './helpers';
+} from "./helpers";
 
 /**
  * Recursively trace transactions up to N hops from a starting address.
@@ -393,7 +393,7 @@ export const getDeepTrace = (
   const adjacencyMap = new Map<string, Transaction[]>();
   const reverseMap = new Map<string, Transaction[]>();
 
-  transactions.forEach(tx => {
+  transactions.forEach((tx) => {
     if (!adjacencyMap.has(tx.from)) adjacencyMap.set(tx.from, []);
     if (!reverseMap.has(tx.to)) reverseMap.set(tx.to, []);
     adjacencyMap.get(tx.from)!.push(tx);
@@ -403,7 +403,7 @@ export const getDeepTrace = (
   const nodes = new Map<string, DeepTraceNode>();
   const edges: DeepTraceEdge[] = [];
   const visited = new Set<string>();
-  const queue: Array<{address: string, depth: number}> = [];
+  const queue: Array<{ address: string; depth: number }> = [];
 
   queue.push({ address: config.startAddress, depth: 0 });
   visited.add(config.startAddress);
@@ -422,18 +422,25 @@ export const getDeepTrace = (
     if (depth >= config.maxDepth) continue;
 
     let txList: Transaction[] = [];
-    if (config.direction === 'inflow') {
+    if (config.direction === "inflow") {
       txList = reverseMap.get(address) || [];
-    } else if (config.direction === 'outflow') {
+    } else if (config.direction === "outflow") {
       txList = adjacencyMap.get(address) || [];
     } else {
-      txList = [...(adjacencyMap.get(address) || []), ...(reverseMap.get(address) || [])];
+      txList = [
+        ...(adjacencyMap.get(address) || []),
+        ...(reverseMap.get(address) || []),
+      ];
     }
 
-    txList.forEach(tx => {
+    txList.forEach((tx) => {
       if (config.minAmount && tx.amount < config.minAmount) return;
       if (config.timeWindow) {
-        if (tx.date < config.timeWindow.start || tx.date > config.timeWindow.end) return;
+        if (
+          tx.date < config.timeWindow.start ||
+          tx.date > config.timeWindow.end
+        )
+          return;
       }
 
       const nextAddress = tx.from === address ? tx.to : tx.from;
@@ -453,14 +460,22 @@ export const getDeepTrace = (
       const node = nodes.get(nextAddress)!;
       node.totalVolume += tx.amount;
       node.transactionCount++;
-      node.firstSeen = new Date(Math.min(node.firstSeen.getTime(), tx.date.getTime()));
-      node.lastSeen = new Date(Math.max(node.lastSeen.getTime(), tx.date.getTime()));
+      node.firstSeen = new Date(
+        Math.min(node.firstSeen.getTime(), tx.date.getTime())
+      );
+      node.lastSeen = new Date(
+        Math.max(node.lastSeen.getTime(), tx.date.getTime())
+      );
 
-      const existingEdge = edges.find(e => e.from === tx.from && e.to === tx.to);
+      const existingEdge = edges.find(
+        (e) => e.from === tx.from && e.to === tx.to
+      );
       if (existingEdge) {
         existingEdge.amount += tx.amount;
         existingEdge.count++;
-        existingEdge.lastTx = new Date(Math.max(existingEdge.lastTx.getTime(), tx.date.getTime()));
+        existingEdge.lastTx = new Date(
+          Math.max(existingEdge.lastTx.getTime(), tx.date.getTime())
+        );
       } else {
         edges.push({
           from: tx.from,
@@ -487,7 +502,7 @@ export const getDeepTrace = (
     statistics: {
       totalNodes: nodes.size,
       totalEdges: edges.length,
-      maxDepth: Math.max(...Array.from(nodes.values()).map(n => n.depth), 0),
+      maxDepth: Math.max(...Array.from(nodes.values()).map((n) => n.depth), 0),
       executionTime: performance.now() - startTime,
     },
   };
@@ -504,9 +519,12 @@ export const findPathsBetween = (
   maxPaths: number = 100
 ): PathFinderResult => {
   const startTime = performance.now();
-  const adjacencyMap = new Map<string, Array<{tx: Transaction, to: string}>>();
-  
-  transactions.forEach(tx => {
+  const adjacencyMap = new Map<
+    string,
+    Array<{ tx: Transaction; to: string }>
+  >();
+
+  transactions.forEach((tx) => {
     if (!adjacencyMap.has(tx.from)) adjacencyMap.set(tx.from, []);
     adjacencyMap.get(tx.from)!.push({ tx, to: tx.to });
   });
@@ -525,7 +543,9 @@ export const findPathsBetween = (
 
     if (current === target) {
       const totalAmount = pathTxs.reduce((sum, tx) => sum + tx.amount, 0);
-      const dates = pathTxs.map(tx => tx.date.getTime()).sort((a, b) => a - b);
+      const dates = pathTxs
+        .map((tx) => tx.date.getTime())
+        .sort((a, b) => a - b);
       const delays = dates.slice(1).map((d, i) => d - dates[i]);
 
       paths.push({
@@ -535,7 +555,10 @@ export const findPathsBetween = (
         hops: pathTxs.length,
         startDate: new Date(dates[0]),
         endDate: new Date(dates[dates.length - 1]),
-        avgDelay: delays.length > 0 ? delays.reduce((a, b) => a + b, 0) / delays.length : 0,
+        avgDelay:
+          delays.length > 0
+            ? delays.reduce((a, b) => a + b, 0) / delays.length
+            : 0,
         suspicionScore: calculatePathSuspicion(pathTxs),
       });
       return;
@@ -545,7 +568,13 @@ export const findPathsBetween = (
     for (const { tx, to } of neighbors) {
       if (!visited.has(to)) {
         visited.add(to);
-        dfs(to, visited, [...pathAddresses, current], [...pathTxs, tx], depth + 1);
+        dfs(
+          to,
+          visited,
+          [...pathAddresses, current],
+          [...pathTxs, tx],
+          depth + 1
+        );
         visited.delete(to);
       }
     }
@@ -554,9 +583,10 @@ export const findPathsBetween = (
   const visited = new Set<string>([source]);
   dfs(source, visited, [], [], 0);
 
-  const shortestPath = paths.length > 0
-    ? paths.reduce((min, p) => p.hops < min.hops ? p : min, paths[0])
-    : null;
+  const shortestPath =
+    paths.length > 0
+      ? paths.reduce((min, p) => (p.hops < min.hops ? p : min), paths[0])
+      : null;
 
   return {
     source,
@@ -565,9 +595,10 @@ export const findPathsBetween = (
     shortestPath,
     statistics: {
       totalPathsFound: paths.length,
-      avgPathLength: paths.length > 0
-        ? paths.reduce((sum, p) => sum + p.hops, 0) / paths.length
-        : 0,
+      avgPathLength:
+        paths.length > 0
+          ? paths.reduce((sum, p) => sum + p.hops, 0) / paths.length
+          : 0,
       executionTime: performance.now() - startTime,
     },
   };
@@ -582,26 +613,35 @@ export const getTaintAnalysis = (
   targetAddress: string,
   maxHops: number = 10
 ): TaintFlow => {
-  const pathResult = findPathsBetween(transactions, sourceAddress, targetAddress, maxHops, 1000);
+  const pathResult = findPathsBetween(
+    transactions,
+    sourceAddress,
+    targetAddress,
+    maxHops,
+    1000
+  );
   const taintPaths: TaintPath[] = [];
   let totalTainted = 0;
 
-  pathResult.paths.forEach(path => {
+  pathResult.paths.forEach((path) => {
+    if (path.transactions.length === 0) return;
+
     let taintAmount = path.transactions[0].amount;
 
     for (let i = 0; i < path.transactions.length; i++) {
       const tx = path.transactions[i];
       const sender = tx.from;
 
-      const senderOutflows = transactions.filter(t =>
-        t.from === sender &&
-        t.date >= tx.date &&
-        t.date <= new Date(tx.date.getTime() + 24 * 60 * 60 * 1000)
+      const senderOutflows = transactions.filter(
+        (t) =>
+          t.from === sender &&
+          t.date >= tx.date &&
+          t.date <= new Date(tx.date.getTime() + 24 * 60 * 60 * 1000)
       );
 
       const totalOutflow = senderOutflows.reduce((sum, t) => sum + t.amount, 0);
       if (totalOutflow > 0) {
-        taintAmount *= (tx.amount / totalOutflow);
+        taintAmount *= tx.amount / totalOutflow;
       }
     }
 
@@ -615,11 +655,13 @@ export const getTaintAnalysis = (
     }
   });
 
-  const targetInflows = transactions.filter(tx => tx.to === targetAddress);
-  const targetTotalInflow = targetInflows.reduce((sum, tx) => sum + tx.amount, 0);
-  const taintPercentage = targetTotalInflow > 0
-    ? (totalTainted / targetTotalInflow) * 100
-    : 0;
+  const targetInflows = transactions.filter((tx) => tx.to === targetAddress);
+  const targetTotalInflow = targetInflows.reduce(
+    (sum, tx) => sum + tx.amount,
+    0
+  );
+  const taintPercentage =
+    targetTotalInflow > 0 ? (totalTainted / targetTotalInflow) * 100 : 0;
 
   return {
     sourceAddress,
@@ -639,34 +681,37 @@ export const detectPatterns = (
 ): SuspiciousPattern[] => {
   const patterns: SuspiciousPattern[] = [];
 
-  const roundAmountTxs = transactions.filter(tx => {
+  const roundAmountTxs = transactions.filter((tx) => {
     const amount = tx.amount;
     return amount >= 1000 && amount % 1000 === 0;
   });
 
   if (roundAmountTxs.length > transactions.length * 0.3) {
     const affectedAddresses = new Set<string>();
-    roundAmountTxs.forEach(tx => {
+    roundAmountTxs.forEach((tx) => {
       affectedAddresses.add(tx.from);
       affectedAddresses.add(tx.to);
     });
 
     patterns.push({
-      type: 'round_amounts',
-      severity: roundAmountTxs.length > transactions.length * 0.5 ? 'high' : 'medium',
+      type: "round_amounts",
+      severity:
+        roundAmountTxs.length > transactions.length * 0.5 ? "high" : "medium",
       score: Math.min((roundAmountTxs.length / transactions.length) * 100, 100),
       affectedAddresses: Array.from(affectedAddresses),
       transactions: roundAmountTxs.slice(0, 100),
       description: `${roundAmountTxs.length} transactions with round amounts detected`,
       metadata: {
         roundRatio: roundAmountTxs.length / transactions.length,
-        commonAmounts: Array.from(findCommonAmounts(roundAmountTxs).entries()).slice(0, 5),
+        commonAmounts: Array.from(
+          findCommonAmounts(roundAmountTxs).entries()
+        ).slice(0, 5),
       },
     });
   }
 
   const addressActivity = new Map<string, Transaction[]>();
-  transactions.forEach(tx => {
+  transactions.forEach((tx) => {
     if (!addressActivity.has(tx.from)) addressActivity.set(tx.from, []);
     addressActivity.get(tx.from)!.push(tx);
   });
@@ -676,22 +721,28 @@ export const detectPatterns = (
     const sortedTxs = txs.sort((a, b) => a.date.getTime() - b.date.getTime());
     let rapidCount = 0;
     for (let i = 1; i < sortedTxs.length; i++) {
-      const timeDiff = sortedTxs[i].date.getTime() - sortedTxs[i-1].date.getTime();
+      const timeDiff =
+        sortedTxs[i].date.getTime() - sortedTxs[i - 1].date.getTime();
       if (timeDiff < 60 * 1000) rapidCount++;
     }
     if (rapidCount > 5) rapidAddresses.push(address);
   });
 
   if (rapidAddresses.length > 0) {
-    const rapidTxs = transactions.filter(tx => rapidAddresses.includes(tx.from));
+    const rapidTxs = transactions.filter((tx) =>
+      rapidAddresses.includes(tx.from)
+    );
     patterns.push({
-      type: 'rapid_transfers',
-      severity: 'high',
+      type: "rapid_transfers",
+      severity: "high",
       score: Math.min(rapidAddresses.length * 10, 100),
       affectedAddresses: rapidAddresses,
       transactions: rapidTxs.slice(0, 100),
       description: `${rapidAddresses.length} addresses with rapid consecutive transfers`,
-      metadata: { addressCount: rapidAddresses.length, avgTimeBetween: 'Less than 1 minute' },
+      metadata: {
+        addressCount: rapidAddresses.length,
+        avgTimeBetween: "Less than 1 minute",
+      },
     });
   }
 
@@ -699,21 +750,30 @@ export const detectPatterns = (
   if (circularFlows.length > 0) {
     const cycleAddresses = new Set<string>(circularFlows.flat());
     patterns.push({
-      type: 'circular_flow',
-      severity: 'critical',
+      type: "circular_flow",
+      severity: "critical",
       score: 90,
       affectedAddresses: Array.from(cycleAddresses),
-      transactions: transactions.filter(tx =>
-        circularFlows.some(cycle => cycle.includes(tx.from) && cycle.includes(tx.to))
-      ).slice(0, 100),
+      transactions: transactions
+        .filter((tx) =>
+          circularFlows.some(
+            (cycle) => cycle.includes(tx.from) && cycle.includes(tx.to)
+          )
+        )
+        .slice(0, 100),
       description: `${circularFlows.length} circular flow pattern(s) detected`,
-      metadata: { cycles: circularFlows.map(c => c.join(' → ')), cycleCount: circularFlows.length },
+      metadata: {
+        cycles: circularFlows.map((c) => c.join(" → ")),
+        cycleCount: circularFlows.length,
+      },
     });
   }
 
   const layeringAddresses: string[] = [];
   addressActivity.forEach((txs, address) => {
-    const inflow = transactions.filter(tx => tx.to === address).reduce((sum, tx) => sum + tx.amount, 0);
+    const inflow = transactions
+      .filter((tx) => tx.to === address)
+      .reduce((sum, tx) => sum + tx.amount, 0);
     const outflow = txs.reduce((sum, tx) => sum + tx.amount, 0);
     if (inflow === 0 || outflow === 0) return;
 
@@ -726,41 +786,58 @@ export const detectPatterns = (
 
   if (layeringAddresses.length > 0) {
     patterns.push({
-      type: 'layering',
-      severity: 'high',
+      type: "layering",
+      severity: "high",
       score: 85,
       affectedAddresses: layeringAddresses,
-      transactions: transactions.filter(tx =>
-        layeringAddresses.includes(tx.from) || layeringAddresses.includes(tx.to)
-      ).slice(0, 100),
+      transactions: transactions
+        .filter(
+          (tx) =>
+            layeringAddresses.includes(tx.from) ||
+            layeringAddresses.includes(tx.to)
+        )
+        .slice(0, 100),
       description: `${layeringAddresses.length} potential layering intermediary address(es)`,
-      metadata: { intermediaryCount: layeringAddresses.length, avgTurnaround: '< 2 hours' },
+      metadata: {
+        intermediaryCount: layeringAddresses.length,
+        avgTurnaround: "< 2 hours",
+      },
     });
   }
 
-  const mixerKeywords = ['tornado', 'mixer', 'tumbler', 'cash', 'blur', 'cyclone'];
-  const mixerTxs = transactions.filter(tx =>
-    mixerKeywords.some(kw => tx.from.toLowerCase().includes(kw) || tx.to.toLowerCase().includes(kw))
+  const mixerKeywords = [
+    "tornado",
+    "mixer",
+    "tumbler",
+    "cash",
+    "blur",
+    "cyclone",
+  ];
+  const mixerTxs = transactions.filter((tx) =>
+    mixerKeywords.some(
+      (kw) =>
+        tx.from.toLowerCase().includes(kw) || tx.to.toLowerCase().includes(kw)
+    )
   );
 
   if (mixerTxs.length > 0) {
     const affectedAddresses = new Set<string>();
-    mixerTxs.forEach(tx => {
+    mixerTxs.forEach((tx) => {
       affectedAddresses.add(tx.from);
       affectedAddresses.add(tx.to);
     });
 
     patterns.push({
-      type: 'mixer_usage',
-      severity: 'critical',
+      type: "mixer_usage",
+      severity: "critical",
       score: 95,
       affectedAddresses: Array.from(affectedAddresses),
       transactions: mixerTxs,
       description: `${mixerTxs.length} transaction(s) involving mixing/tumbler services`,
       metadata: {
         totalVolume: mixerTxs.reduce((sum, tx) => sum + tx.amount, 0),
-        mixerAddresses: Array.from(affectedAddresses).filter(addr =>
-          mixerKeywords.some(kw => addr.toLowerCase().includes(kw))
+        mixerAddresses: Array.from(affectedAddresses).filter((addr) =>
+          mixerKeywords.some((kw) => addr.toLowerCase().includes(kw))
         ),
       },
     });
@@ -770,23 +847,30 @@ export const detectPatterns = (
   addressActivity.forEach((txs, address) => {
     if (txs.length < 20) return;
     const sortedTxs = txs.sort((a, b) => a.date.getTime() - b.date.getTime());
-    const timeSpan = sortedTxs[sortedTxs.length - 1].date.getTime() - sortedTxs[0].date.getTime();
+    const timeSpan =
+      sortedTxs[sortedTxs.length - 1].date.getTime() -
+      sortedTxs[0].date.getTime();
     const daysSpan = timeSpan / (1000 * 60 * 60 * 24);
-    if (daysSpan > 0 && (txs.length / daysSpan) > 10) {
+    if (daysSpan > 0 && txs.length / daysSpan > 10) {
       highVelocityAddresses.push(address);
     }
   });
 
   if (highVelocityAddresses.length > 0) {
-    const velocityTxs = transactions.filter(tx => highVelocityAddresses.includes(tx.from));
+    const velocityTxs = transactions.filter((tx) =>
+      highVelocityAddresses.includes(tx.from)
+    );
     patterns.push({
-      type: 'high_velocity',
-      severity: 'medium',
+      type: "high_velocity",
+      severity: "medium",
       score: 70,
       affectedAddresses: highVelocityAddresses,
       transactions: velocityTxs.slice(0, 100),
       description: `${highVelocityAddresses.length} address(es) with high transaction velocity`,
-      metadata: { addressCount: highVelocityAddresses.length, avgTxPerDay: '> 10' },
+      metadata: {
+        addressCount: highVelocityAddresses.length,
+        avgTxPerDay: "> 10",
+      },
     });
   }
 
@@ -802,29 +886,34 @@ export const getAddressClusters = (
   const addressFeatures = new Map<string, any>();
   const allAddresses = new Set<string>();
 
-  transactions.forEach(tx => {
+  transactions.forEach((tx) => {
     allAddresses.add(tx.from);
     allAddresses.add(tx.to);
   });
 
-  allAddresses.forEach(address => {
-    const sent = transactions.filter(tx => tx.from === address);
-    const received = transactions.filter(tx => tx.to === address);
-    const sentAmounts = sent.map(tx => tx.amount);
-    const sentTimes = sent.map(tx => tx.date.getHours());
+  allAddresses.forEach((address) => {
+    const sent = transactions.filter((tx) => tx.from === address);
+    const received = transactions.filter((tx) => tx.to === address);
+    const sentAmounts = sent.map((tx) => tx.amount);
+    const sentTimes = sent.map((tx) => tx.date.getHours());
 
     const counterparties = new Set<string>();
-    sent.forEach(tx => counterparties.add(tx.to));
-    received.forEach(tx => counterparties.add(tx.from));
+    sent.forEach((tx) => counterparties.add(tx.to));
+    received.forEach((tx) => counterparties.add(tx.from));
 
-    const roundAmounts = sentAmounts.filter(amt => amt >= 1000 && amt % 1000 === 0);
+    const roundAmounts = sentAmounts.filter(
+      (amt) => amt >= 1000 && amt % 1000 === 0
+    );
 
     addressFeatures.set(address, {
-      avgTransactionSize: sentAmounts.length > 0
-        ? sentAmounts.reduce((a, b) => a + b, 0) / sentAmounts.length : 0,
+      avgTransactionSize:
+        sentAmounts.length > 0
+          ? sentAmounts.reduce((a, b) => a + b, 0) / sentAmounts.length
+          : 0,
       peakActivityHour: sentTimes.length > 0 ? mode(sentTimes) : 0,
       primaryCounterparties: Array.from(counterparties).slice(0, 5),
-      roundAmountRatio: sentAmounts.length > 0 ? roundAmounts.length / sentAmounts.length : 0,
+      roundAmountRatio:
+        sentAmounts.length > 0 ? roundAmounts.length / sentAmounts.length : 0,
       txCount: sent.length + received.length,
     });
   });
@@ -833,12 +922,12 @@ export const getAddressClusters = (
   let clusterId = 0;
   const processed = new Set<string>();
 
-  allAddresses.forEach(address1 => {
+  allAddresses.forEach((address1) => {
     if (processed.has(address1)) return;
     const cluster: string[] = [address1];
     processed.add(address1);
 
-    allAddresses.forEach(address2 => {
+    allAddresses.forEach((address2) => {
       if (processed.has(address2)) return;
       const similarity = calculateFeatureSimilarity(
         addressFeatures.get(address1)!,
@@ -857,8 +946,8 @@ export const getAddressClusters = (
 
   const result: AddressCluster[] = [];
   clusters.forEach((addresses, id) => {
-    const clusterTxs = transactions.filter(tx =>
-      addresses.includes(tx.from) || addresses.includes(tx.to)
+    const clusterTxs = transactions.filter(
+      (tx) => addresses.includes(tx.from) || addresses.includes(tx.to)
     );
     const totalVolume = clusterTxs.reduce((sum, tx) => sum + tx.amount, 0);
     const features = addressFeatures.get(addresses[0])!;
@@ -887,36 +976,36 @@ export const getTransactionTimeline = (
   const events: TimelineEvent[] = [];
 
   const relevantTxs = transactions
-    .filter(tx => tx.from === address || tx.to === address)
+    .filter((tx) => tx.from === address || tx.to === address)
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
   if (relevantTxs.length === 0) return events;
 
   const dailyGroups = new Map<string, Transaction[]>();
-  relevantTxs.forEach(tx => {
-    const dateKey = tx.date.toISOString().split('T')[0];
+  relevantTxs.forEach((tx) => {
+    const dateKey = tx.date.toISOString().split("T")[0];
     if (!dailyGroups.has(dateKey)) dailyGroups.set(dateKey, []);
     dailyGroups.get(dateKey)!.push(tx);
   });
 
   dailyGroups.forEach((txs, dateKey) => {
     const totalAmount = txs.reduce((sum, tx) => sum + tx.amount, 0);
-    let eventType: TimelineEvent['type'] = 'transfer';
+    let eventType: TimelineEvent["type"] = "transfer";
     let significance = 0.5;
 
     if (txs.length > 10) {
-      eventType = 'spike';
+      eventType = "spike";
       significance = Math.min(txs.length / 50, 1);
     }
 
-    const inflows = txs.filter(tx => tx.to === address);
-    const outflows = txs.filter(tx => tx.from === address);
+    const inflows = txs.filter((tx) => tx.to === address);
+    const outflows = txs.filter((tx) => tx.from === address);
 
     if (inflows.length > 5 && outflows.length <= 1) {
-      eventType = 'aggregation';
+      eventType = "aggregation";
       significance = 0.8;
     } else if (inflows.length <= 1 && outflows.length > 5) {
-      eventType = 'split';
+      eventType = "split";
       significance = 0.8;
     }
 
@@ -925,23 +1014,27 @@ export const getTransactionTimeline = (
       type: eventType,
       address,
       amount: totalAmount,
-      relatedAddresses: Array.from(new Set(txs.map(tx =>
-        tx.from === address ? tx.to : tx.from
-      ))),
+      relatedAddresses: Array.from(
+        new Set(txs.map((tx) => (tx.from === address ? tx.to : tx.from)))
+      ),
       significance,
     });
   });
 
-  const sortedEvents = events.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  const sortedEvents = events.sort(
+    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+  );
   const dormantEvents: TimelineEvent[] = [];
 
   for (let i = 1; i < sortedEvents.length; i++) {
-    const gap = sortedEvents[i].timestamp.getTime() - sortedEvents[i-1].timestamp.getTime();
+    const gap =
+      sortedEvents[i].timestamp.getTime() -
+      sortedEvents[i - 1].timestamp.getTime();
     const dayGap = gap / (1000 * 60 * 60 * 24);
     if (dayGap > 7) {
       dormantEvents.push({
-        timestamp: new Date(sortedEvents[i-1].timestamp.getTime() + gap / 2),
-        type: 'dormant',
+        timestamp: new Date(sortedEvents[i - 1].timestamp.getTime() + gap / 2),
+        type: "dormant",
         address,
         amount: 0,
         relatedAddresses: [],
@@ -950,5 +1043,7 @@ export const getTransactionTimeline = (
     }
   }
 
-  return [...events, ...dormantEvents].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  return [...events, ...dormantEvents].sort(
+    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+  );
 };
