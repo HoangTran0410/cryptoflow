@@ -1,1 +1,2 @@
 thêm cột tần suất vào netflow leader board: số giao dịch chuyển đi / chuyển về
+
