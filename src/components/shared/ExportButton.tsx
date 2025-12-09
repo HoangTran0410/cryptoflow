@@ -1,27 +1,27 @@
-import React, { useState } from 'react';
-import { Download, ChevronDown } from 'lucide-react';
+import React, { useState } from "react";
+import { Download, ChevronDown } from "lucide-react";
 
 interface ExportButtonProps {
-  onExport: (format: 'csv' | 'json' | 'svg' | 'png') => void;
-  formats?: ('csv' | 'json' | 'svg' | 'png')[];
+  onExport: (format: string) => void;
+  formats?: string[];
   label?: string;
 }
 
 const ExportButton: React.FC<ExportButtonProps> = ({
   onExport,
-  formats = ['csv', 'json'],
-  label = 'Export',
+  formats = ["csv", "json"],
+  label = "Export",
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const formatLabels = {
-    csv: 'CSV',
-    json: 'JSON',
-    svg: 'SVG Image',
-    png: 'PNG Image',
+    csv: "CSV",
+    json: "JSON",
+    svg: "SVG Image",
+    png: "PNG Image",
   };
 
-  const handleExport = (format: 'csv' | 'json' | 'svg' | 'png') => {
+  const handleExport = (format: string) => {
     onExport(format);
     setIsOpen(false);
   };

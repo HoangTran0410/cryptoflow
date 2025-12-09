@@ -122,14 +122,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-[700px] gap-4">
+    <div className="flex flex-col h-full gap-4">
       {/* Header */}
       <div className="flex items-center gap-3 shrink-0">
         <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
           <Wallet className="w-6 h-6 text-white" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-white">Ledger</h2>
+          <h2 className="text-2xl font-bold text-white">Transactions</h2>
           <p className="text-slate-400 text-sm">
             Full history of all processed transactions
           </p>
@@ -138,7 +138,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden flex flex-col h-full">
         <div className="p-5 border-b border-slate-800 flex flex-col md:flex-row justify-between md:items-center gap-4 shrink-0">
           <h3 className="text-lg font-semibold text-white">
-            Transaction Ledger ({filteredData.length.toLocaleString()})
+            Total ({filteredData.length.toLocaleString()})
           </h3>
         </div>
 

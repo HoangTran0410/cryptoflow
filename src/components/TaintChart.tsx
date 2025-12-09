@@ -6,8 +6,7 @@ import {
   SankeyNode,
   SankeyLink,
 } from "d3-sankey";
-import { Transaction, TaintFlow, TaintPath } from "../types";
-import { getTaintAnalysis } from "../utils/analytics";
+import { Transaction, TaintFlow } from "../types";
 import { Search, Download, Droplet } from "lucide-react";
 import { useForensicsWorker } from "../hooks/useForensicsWorker";
 import LoadingSpinner from "./shared/LoadingSpinner";

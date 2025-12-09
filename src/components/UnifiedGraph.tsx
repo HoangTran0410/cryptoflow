@@ -20,6 +20,7 @@ import {
   X,
   Network,
 } from "lucide-react";
+import TransactionTable from "./TransactionTable";
 
 interface UnifiedGraphProps {
   transactions: Transaction[];
@@ -40,6 +41,19 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
   const [links, setLinks] = useState<Link[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedEdge, setSelectedEdge] = useState<{
+    source: string;
+    target: string;
+  } | null>(null);
+
+  const edgeTransactions = useMemo(() => {
+    if (!selectedEdge) return [];
+    return transactions.filter(
+      (t) =>
+        (t.from === selectedEdge.source && t.to === selectedEdge.target) ||
+        (t.from === selectedEdge.target && t.to === selectedEdge.source)
+    );
+  }, [selectedEdge, transactions]);
 
   // Date Picker State
   const [isDateOpen, setIsDateOpen] = useState(false);
@@ -201,6 +215,10 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
       }, 300);
     }
   };
+
+  const handleLinkClick = useCallback((sourceId: string, targetId: string) => {
+    setSelectedEdge({ source: sourceId, target: targetId });
+  }, []);
 
   const handleReset = () => {
     // Re-generate to reset layout state
@@ -398,6 +416,42 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
       .attr("class", "graph-link")
       .attr("stroke-width", (d) => Math.min(Math.sqrt(d.value) * 0.5 + 0.5, 4));
 
+    // Invisible Clickable Area for Links
+    const linkHitGroup = g.select<SVGGElement>(".link-hit-group");
+    const linkHitSelection = (
+      linkHitGroup.empty()
+        ? g.insert("g", ".node-group").attr("class", "link-hit-group")
+        : linkHitGroup
+    )
+      .selectAll<SVGLineElement, Link>("line")
+      .data(
+        displayLinks,
+        (d: any) => `${d.source.id || d.source}-${d.target.id || d.target}`
+      );
+
+    linkHitSelection.exit().remove();
+
+    const linkHitEnter = linkHitSelection
+      .enter()
+      .append("line")
+      .attr("stroke", "transparent")
+      .attr("stroke-width", 10)
+      .style("cursor", "pointer")
+      .on("click", (event, d) => {
+        event.stopPropagation();
+        const sourceId =
+          typeof d.source === "object"
+            ? (d.source as Node).id
+            : (d.source as string);
+        const targetId =
+          typeof d.target === "object"
+            ? (d.target as Node).id
+            : (d.target as string);
+        handleLinkClick(sourceId, targetId);
+      });
+
+    const allLinkHits = linkHitEnter.merge(linkHitSelection);
+
     // Nodes
     const nodeSelection = nodeGroup
       .selectAll<SVGGElement, Node>("g")
@@ -465,6 +519,13 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
 
     simulation.on("tick", () => {
       allLinks
+        .attr("x1", (d: any) => d.source.x)
+        .attr("y1", (d: any) => d.source.y)
+        .attr("x2", (d: any) => d.target.x)
+        .attr("x2", (d: any) => d.target.x)
+        .attr("y2", (d: any) => d.target.y);
+
+      allLinkHits
         .attr("x1", (d: any) => d.source.x)
         .attr("y1", (d: any) => d.source.y)
         .attr("x2", (d: any) => d.target.x)
@@ -736,6 +797,40 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
         </form>
       </div>
 
+      {/* Selected Edge Modal */}
+      {selectedEdge && (
+        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-4xl h-[80%] flex flex-col shadow-2xl relative">
+            <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50 rounded-t-xl">
+              <div>
+                <h3 className="text-white font-bold text-lg">
+                  Transaction History
+                </h3>
+                <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
+                  <span className="font-mono bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                    {selectedEdge.source}
+                  </span>
+                  <span>↔</span>
+                  <span className="font-mono bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                    {selectedEdge.target}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedEdge(null)}
+                className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-hidden p-4">
+              <TransactionTable transactions={edgeTransactions} />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 flex gap-4 overflow-hidden relative">
         {/* --- Main Graph Canvas --- */}
         <div
@@ -752,10 +847,7 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
             <h3 className="text-white font-semibold text-sm shadow-black drop-shadow-md">
               Network Explorer
             </h3>
-            <p className="text-slate-400 text-xs mt-1 max-w-[220px] shadow-black drop-shadow-md bg-slate-950/50 p-2 rounded backdrop-blur-sm border border-slate-800/50">
-              Scroll to Zoom. Click to Select. Nodes positions are locked after
-              loading (No Drag).
-            </p>
+
             <div className="mt-2 text-[10px] text-slate-500 bg-slate-900/50 p-1 rounded inline-block border border-slate-800/50">
               Nodes: {displayNodes.length} | Links: {displayLinks.length}
             </div>

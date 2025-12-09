@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Transaction, SuspiciousPattern, AddressCluster } from "../types";
 import { useForensicsWorker } from "../hooks/useForensicsWorker";
 import { patternCache, generateCacheKey } from "../utils/cache";
@@ -6,31 +6,11 @@ import { exportData } from "../utils/export";
 import LoadingSpinner from "./shared/LoadingSpinner";
 import SeverityBadge from "./shared/SeverityBadge";
 import ExportButton from "./shared/ExportButton";
-import PathExplorer from "./PathExplorer";
-import PathFinder from "./PathFinder";
-import TimelineTracer from "./TimelineTracer";
-import TaintChart from "./TaintChart";
-import {
-  Shield,
-  AlertTriangle,
-  TrendingUp,
-  Network,
-  Search,
-  Calendar,
-  Workflow,
-  X,
-} from "lucide-react";
+import { Shield, AlertTriangle, Network, X, RefreshCw } from "lucide-react";
 
 interface ForensicsDashboardProps {
   transactions: Transaction[];
 }
-
-type ActiveTool =
-  | "overview"
-  | "path-explorer"
-  | "path-finder"
-  | "timeline"
-  | "taint-chart";
 
 const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
   transactions,
@@ -39,57 +19,86 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
   const [patterns, setPatterns] = useState<SuspiciousPattern[]>([]);
   const [clusters, setClusters] = useState<AddressCluster[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  // const [activeTool, setActiveTool] = useState<ActiveTool>('overview');
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState("Initializing...");
   const [selectedPattern, setSelectedPattern] =
     useState<SuspiciousPattern | null>(null);
 
-  // Run pattern detection on mount
-  useEffect(() => {
-    const runAnalysis = async () => {
-      if (!isReady) return;
+  // Run pattern detection
+  const runAnalysis = useCallback(async () => {
+    if (!isReady) return;
 
-      setIsLoading(true);
+    setIsLoading(true);
+    setLoadingProgress(10);
+    setLoadingMessage("Initializing forensic engine...");
 
-      // Check cache first
-      const patternCacheKey = generateCacheKey("patterns", {
-        txCount: transactions.length,
+    // Check cache first
+    const patternCacheKey = generateCacheKey("patterns", {
+      txCount: transactions.length,
+    });
+    const clusterCacheKey = generateCacheKey("clusters", {
+      txCount: transactions.length,
+    });
+
+    let cachedPatterns = patternCache.get(patternCacheKey);
+    let cachedClusters = patternCache.get(clusterCacheKey);
+
+    if (!cachedPatterns) {
+      setLoadingProgress(30);
+      setLoadingMessage("Detecting suspicious patterns...");
+      cachedPatterns = await executeTask<SuspiciousPattern[]>({
+        type: "DETECT_PATTERNS",
+        payload: { transactions },
       });
-      const clusterCacheKey = generateCacheKey("clusters", {
-        txCount: transactions.length,
+      if (cachedPatterns) {
+        patternCache.set(patternCacheKey, cachedPatterns);
+      }
+    }
+
+    if (!cachedClusters) {
+      setLoadingProgress(60);
+      setLoadingMessage("Clustering addresses & analyzing behaviors...");
+      cachedClusters = await executeTask<AddressCluster[]>({
+        type: "CLUSTER_ADDRESSES",
+        payload: { transactions },
       });
-
-      let cachedPatterns = patternCache.get(patternCacheKey);
-      let cachedClusters = patternCache.get(clusterCacheKey);
-
-      if (!cachedPatterns) {
-        cachedPatterns = await executeTask<SuspiciousPattern[]>({
-          type: "DETECT_PATTERNS",
-          payload: { transactions },
-        });
-        if (cachedPatterns) {
-          patternCache.set(patternCacheKey, cachedPatterns);
-        }
+      if (cachedClusters) {
+        patternCache.set(clusterCacheKey, cachedClusters);
       }
+    }
 
-      if (!cachedClusters) {
-        cachedClusters = await executeTask<AddressCluster[]>({
-          type: "CLUSTER_ADDRESSES",
-          payload: { transactions },
-        });
-        if (cachedClusters) {
-          patternCache.set(clusterCacheKey, cachedClusters);
-        }
-      }
+    setLoadingProgress(90);
+    setLoadingMessage("Finalizing analysis...");
 
-      setPatterns(cachedPatterns || []);
-      setClusters(cachedClusters || []);
+    setPatterns(cachedPatterns || []);
+    setClusters(cachedClusters || []);
+
+    // Small delay to show 100%
+    setTimeout(() => {
+      setLoadingProgress(100);
       setIsLoading(false);
-    };
-
-    runAnalysis();
+    }, 500);
   }, [transactions, isReady, executeTask]);
 
-  const handleExport = (format: "csv" | "json") => {
+  useEffect(() => {
+    runAnalysis();
+  }, [runAnalysis]);
+
+  const handleReRun = () => {
+    const patternCacheKey = generateCacheKey("patterns", {
+      txCount: transactions.length,
+    });
+    const clusterCacheKey = generateCacheKey("clusters", {
+      txCount: transactions.length,
+    });
+
+    patternCache.delete(patternCacheKey);
+    patternCache.delete(clusterCacheKey);
+
+    runAnalysis();
+  };
+
+  const handleExport = (format: string) => {
     if (format === "json") {
       exportData({ patterns, clusters }, "json");
     } else {
@@ -107,31 +116,10 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <LoadingSpinner message="Running forensic analysis..." />
+        <LoadingSpinner message={loadingMessage} progress={loadingProgress} />
       </div>
     );
   }
-
-  // if (activeTool !== 'overview') {
-  //   return (
-  //     <div className="space-y-4">
-  //       <div className="flex items-center justify-between">
-  //         <button
-  //           onClick={() => setActiveTool('overview')}
-  //           className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
-  //         >
-  //           <X className="w-4 h-4" />
-  //           <span className="text-sm">Back to Overview</span>
-  //         </button>
-  //       </div>
-
-  //       {activeTool === 'path-explorer' && <PathExplorer transactions={transactions} />}
-  //       {activeTool === 'path-finder' && <PathFinder transactions={transactions} />}
-  //       {activeTool === 'timeline' && <TimelineTracer transactions={transactions} />}
-  //       {activeTool === 'taint-chart' && <TaintChart transactions={transactions} />}
-  //     </div>
-  //   );
-  // }
 
   return (
     <div className="space-y-6">
@@ -148,11 +136,21 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
             </p>
           </div>
         </div>
-        <ExportButton
-          onExport={handleExport}
-          formats={["csv", "json"]}
-          label="Export Report"
-        />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleReRun}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg text-sm font-medium transition-colors"
+            title="Re-run Analysis"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span className="hidden sm:inline">Rerun</span>
+          </button>
+          <ExportButton
+            onExport={handleExport}
+            formats={["csv", "json"]}
+            label="Export Report"
+          />
+        </div>
       </div>
 
       {/* Pattern Detection Cards */}
@@ -269,60 +267,6 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
           </div>
         </div>
       )}
-
-      {/* Deep Analysis Tools */}
-      {/* <div>
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <Search className="w-5 h-5 text-emerald-400" />
-          Deep Analysis Tools
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <button
-            onClick={() => setActiveTool('path-explorer')}
-            className="bg-gradient-to-br from-indigo-900/50 to-purple-900/50 border border-indigo-500/30 hover:border-indigo-500/50 rounded-xl p-6 text-left transition-all hover:shadow-lg hover:shadow-indigo-500/20 group"
-          >
-            <Network className="w-8 h-8 text-indigo-400 mb-3 group-hover:scale-110 transition-transform" />
-            <h4 className="text-white font-semibold mb-1">Path Explorer</h4>
-            <p className="text-slate-400 text-xs">
-              Multi-hop transaction tracing with configurable depth
-            </p>
-          </button>
-
-          <button
-            onClick={() => setActiveTool('path-finder')}
-            className="bg-gradient-to-br from-emerald-900/50 to-teal-900/50 border border-emerald-500/30 hover:border-emerald-500/50 rounded-xl p-6 text-left transition-all hover:shadow-lg hover:shadow-emerald-500/20 group"
-          >
-            <Workflow className="w-8 h-8 text-emerald-400 mb-3 group-hover:scale-110 transition-transform" />
-            <h4 className="text-white font-semibold mb-1">Path Finder</h4>
-            <p className="text-slate-400 text-xs">
-              Find all paths connecting two addresses
-            </p>
-          </button>
-
-          <button
-            onClick={() => setActiveTool('timeline')}
-            className="bg-gradient-to-br from-orange-900/50 to-red-900/50 border border-orange-500/30 hover:border-orange-500/50 rounded-xl p-6 text-left transition-all hover:shadow-lg hover:shadow-orange-500/20 group"
-          >
-            <Calendar className="w-8 h-8 text-orange-400 mb-3 group-hover:scale-110 transition-transform" />
-            <h4 className="text-white font-semibold mb-1">Timeline Tracer</h4>
-            <p className="text-slate-400 text-xs">
-              Chronological fund movement analysis
-            </p>
-          </button>
-
-          <button
-            onClick={() => setActiveTool('taint-chart')}
-            className="bg-gradient-to-br from-pink-900/50 to-rose-900/50 border border-pink-500/30 hover:border-pink-500/50 rounded-xl p-6 text-left transition-all hover:shadow-lg hover:shadow-pink-500/20 group"
-          >
-            <TrendingUp className="w-8 h-8 text-pink-400 mb-3 group-hover:scale-110 transition-transform" />
-            <h4 className="text-white font-semibold mb-1">Taint Analysis</h4>
-            <p className="text-slate-400 text-xs">
-              Track fund flow percentages between addresses
-            </p>
-          </button>
-        </div>
-      </div> */}
 
       {/* Pattern Detail Modal */}
       {selectedPattern && (

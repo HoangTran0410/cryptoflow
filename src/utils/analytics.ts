@@ -316,7 +316,7 @@ export const getNeighbors = (
   nodeId: string
 ): { nodes: Node[]; links: Link[] } => {
   const neighbors = new Map<string, Node>();
-  const links: Link[] = [];
+  const linkMap = new Map<string, Link>();
 
   transactions.forEach((t) => {
     if (t.from === nodeId || t.to === nodeId) {
@@ -336,17 +336,33 @@ export const getNeighbors = (
       n.val += t.amount;
       n.transactionCount = (n.transactionCount || 0) + 1;
 
-      links.push({ source: t.from, target: t.to, value: t.amount });
+      // Aggregate links
+      const linkId = `${t.from}-${t.to}`;
+      if (!linkMap.has(linkId)) {
+        linkMap.set(linkId, {
+          source: t.from,
+          target: t.to,
+          value: 0,
+          count: 0,
+        });
+      }
+      const l = linkMap.get(linkId)!;
+      l.value += t.amount;
+      l.count = (l.count || 0) + 1;
     }
   });
 
+  const links = Array.from(linkMap.values());
+
   // Add self
+  // Sum values of all connected links
   const selfVal = links.reduce((acc, l) => acc + l.value, 0);
+
   const selfNode: Node = {
     id: nodeId,
     val: selfVal,
     type: "main",
-    transactionCount: links.length,
+    transactionCount: links.reduce((sum, l) => sum + (l.count || 0), 0),
   };
 
   return {

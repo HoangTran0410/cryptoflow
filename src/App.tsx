@@ -7,7 +7,6 @@ import TransactionTable from "./components/TransactionTable";
 import MoneyFlow from "./components/MoneyFlow";
 import UnifiedGraph from "./components/UnifiedGraph";
 import ForensicsDashboard from "./components/ForensicsDashboard";
-import PathExplorer from "./components/PathExplorer";
 import PathFinder from "./components/PathFinder";
 import TimelineTracer from "./components/TimelineTracer";
 import TaintChart from "./components/TaintChart";
@@ -30,7 +29,6 @@ type Tab =
   | "interactive"
   | "money-flow"
   | "forensics"
-  // | "path-explorer"
   | "path-finder"
   | "timeline"
   | "taint"
@@ -69,7 +67,6 @@ const App: React.FC = () => {
     { id: "transactions", label: "Transactions", icon: Wallet },
     { id: "money-flow", label: "Money Flow Analysis", icon: TrendingUp },
     { id: "interactive", label: "Interactive Graph", icon: Network },
-    // { id: "path-explorer", label: "Path Explorer", icon: GitBranch },
     { id: "path-finder", label: "Path Finder", icon: Route },
     { id: "timeline", label: "Timeline Tracer", icon: Calendar },
     { id: "taint", label: "Taint Analysis", icon: Droplet },
@@ -204,18 +201,6 @@ const App: React.FC = () => {
                 <ForensicsDashboard transactions={transactions} />
               )}
             </div>
-
-            {/* Lazy load Path Explorer */}
-            {/* <div
-              style={{
-                display: activeTab === "path-explorer" ? "block" : "none",
-              }}
-              className="h-full"
-            >
-              {visitedTabs.has("path-explorer") && (
-                <PathExplorer transactions={transactions} />
-              )}
-            </div> */}
 
             {/* Lazy load Path Finder */}
             <div
