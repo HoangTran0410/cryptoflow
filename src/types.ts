@@ -1,4 +1,4 @@
-import * as d3 from 'd3';
+import * as d3 from "d3";
 
 export interface Transaction {
   id: string;
@@ -7,14 +7,14 @@ export interface Transaction {
   to: string;
   amount: number;
   currency: string;
-  type?: 'transfer' | 'mint' | 'burn' | 'fee';
+  type?: "transfer" | "mint" | "burn" | "fee";
 }
 
 export interface Node extends d3.SimulationNodeDatum {
   id: string;
   group?: number;
   val: number; // Volume
-  type: 'source' | 'target' | 'mixed' | 'main';
+  type: "source" | "target" | "mixed" | "main";
   transactionCount?: number;
   // D3 Simulation properties
   x?: number;
@@ -70,7 +70,7 @@ export interface TraceData {
 export interface TransactionFilter {
   minAmount: number;
   startDate: string; // YYYY-MM-DD
-  endDate: string;   // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
   minInflow?: number;
   minOutflow?: number;
 }
@@ -79,24 +79,24 @@ export interface TransactionFilter {
 
 // Multi-hop path representation
 export interface TransactionPath {
-  addresses: string[];              // Ordered sequence of addresses
-  transactions: Transaction[];      // Transactions connecting the path
-  totalAmount: number;              // Sum of amounts along path
-  hops: number;                     // Number of hops (edges)
-  startDate: Date;                  // First transaction timestamp
-  endDate: Date;                    // Last transaction timestamp
-  avgDelay: number;                 // Average time between hops (ms)
-  suspicionScore: number;           // 0-100 risk score
+  addresses: string[]; // Ordered sequence of addresses
+  transactions: Transaction[]; // Transactions connecting the path
+  totalAmount: number; // Sum of amounts along path
+  hops: number; // Number of hops (edges)
+  startDate: Date; // First transaction timestamp
+  endDate: Date; // Last transaction timestamp
+  avgDelay: number; // Average time between hops (ms)
+  suspicionScore: number; // 0-100 risk score
 }
 
 // Deep trace configuration
 export interface DeepTraceConfig {
   startAddress: string;
-  direction: 'inflow' | 'outflow' | 'both';
-  maxDepth: number;                 // 2-20 hops
-  minAmount?: number;               // Filter threshold
-  maxPaths?: number;                // Limit results
-  includeCycles?: boolean;          // Track circular flows
+  direction: "inflow" | "outflow" | "both";
+  maxDepth: number; // 2-20 hops
+  minAmount?: number; // Filter threshold
+  maxPaths?: number; // Limit results
+  includeCycles?: boolean; // Track circular flows
   timeWindow?: {
     start: Date;
     end: Date;
@@ -106,7 +106,7 @@ export interface DeepTraceConfig {
 // Deep trace node
 export interface DeepTraceNode {
   address: string;
-  depth: number;                    // Distance from origin
+  depth: number; // Distance from origin
   totalVolume: number;
   transactionCount: number;
   firstSeen: Date;
@@ -118,7 +118,7 @@ export interface DeepTraceEdge {
   from: string;
   to: string;
   amount: number;
-  count: number;                    // Number of transactions
+  count: number; // Number of transactions
   firstTx: Date;
   lastTx: Date;
 }
@@ -133,7 +133,7 @@ export interface DeepTraceResult {
     totalNodes: number;
     totalEdges: number;
     maxDepth: number;
-    executionTime: number;          // ms
+    executionTime: number; // ms
   };
 }
 
@@ -152,41 +152,46 @@ export interface PathFinderResult {
 
 // Taint analysis path
 export interface TaintPath {
-  path: string[];                   // Address sequence
-  amount: number;                   // Tainted amount through this path
-  percentage: number;               // % of total taint
+  path: string[]; // Address sequence
+  amount: number; // Tainted amount through this path
+  percentage: number; // % of total taint
 }
 
 // Taint analysis result
 export interface TaintFlow {
-  sourceAddress: string;            // Origin wallet
-  targetAddress: string;            // Destination wallet
-  totalTainted: number;             // Total amount that reached target
-  taintPercentage: number;          // % of target's funds from source
-  paths: TaintPath[];               // Individual taint propagation paths
-  hops: number;                     // Max hops in analysis
+  sourceAddress: string; // Origin wallet
+  targetAddress: string; // Destination wallet
+  totalTainted: number; // Total amount that reached target
+  taintPercentage: number; // % of target's funds from source
+  paths: TaintPath[]; // Individual taint propagation paths
+  hops: number; // Max hops in analysis
 }
 
 // Pattern detection
 export interface SuspiciousPattern {
-  type: 'round_amounts' | 'rapid_transfers' | 'circular_flow' |
-        'layering' | 'mixer_usage' | 'high_velocity';
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  score: number;                    // 0-100
+  type:
+    | "round_amounts"
+    | "rapid_transfers"
+    | "circular_flow"
+    | "layering"
+    | "mixer_usage"
+    | "high_velocity";
+  severity: "low" | "medium" | "high" | "critical";
+  score: number; // 0-100
   affectedAddresses: string[];
   transactions: Transaction[];
   description: string;
-  metadata: Record<string, any>;    // Pattern-specific details
+  metadata: Record<string, any>; // Pattern-specific details
 }
 
 // Address clustering
 export interface AddressCluster {
   clusterId: string;
   addresses: string[];
-  commonBehavior: string;           // Description of shared patterns
+  commonBehavior: string; // Description of shared patterns
   totalVolume: number;
   transactionCount: number;
-  confidenceScore: number;          // 0-1 clustering confidence
+  confidenceScore: number; // 0-1 clustering confidence
   features: {
     avgTransactionSize: number;
     peakActivityHour: number;
@@ -198,11 +203,11 @@ export interface AddressCluster {
 // Timeline event for temporal analysis
 export interface TimelineEvent {
   timestamp: Date;
-  type: 'transfer' | 'aggregation' | 'split' | 'dormant' | 'spike';
+  type: "transfer" | "aggregation" | "split" | "dormant" | "spike";
   address: string;
   amount: number;
   relatedAddresses: string[];
-  significance: number;             // Event importance (0-1)
+  significance: number; // Event importance (0-1)
 }
 
 // Sankey diagram data structure
@@ -214,29 +219,68 @@ export interface SankeyData {
 export interface SankeyNode {
   id: string;
   name: string;
-  depth: number;                    // Vertical layer
-  value: number;                    // Total flow through node
+  depth: number; // Vertical layer
+  value: number; // Total flow through node
 }
 
 export interface SankeyLink {
-  source: number;                   // Node index
-  target: number;                   // Node index
-  value: number;                    // Flow amount
-  percentage: number;               // % of source's outflow
+  source: number; // Node index
+  target: number; // Node index
+  value: number; // Flow amount
+  percentage: number; // % of source's outflow
 }
 
 // Web Worker message types
 export interface ForensicsWorkerMessage {
-  type: 'DEEP_TRACE' | 'FIND_PATHS' | 'TAINT_ANALYSIS' |
-        'DETECT_PATTERNS' | 'CLUSTER_ADDRESSES';
+  type:
+    | "DEEP_TRACE"
+    | "FIND_PATHS"
+    | "TAINT_ANALYSIS"
+    | "DETECT_PATTERNS"
+    | "CLUSTER_ADDRESSES";
   payload: any;
   requestId: string;
 }
 
 export interface ForensicsWorkerResponse {
-  type: 'SUCCESS' | 'ERROR' | 'PROGRESS';
+  type: "SUCCESS" | "ERROR" | "PROGRESS";
   requestId: string;
   data?: any;
   error?: string;
-  progress?: number;                // 0-100
+  progress?: number; // 0-100
+}
+
+// ===== WALLET ANALYSIS TYPES =====
+
+export interface WalletTimeSeries {
+  date: string;
+  inflow: number;
+  outflow: number;
+  netFlow: number;
+  inflowCount: number;
+  outflowCount: number;
+}
+
+export interface DailyTransactionCount {
+  date: string;
+  inflowCount: number;
+  outflowCount: number;
+  totalCount: number;
+}
+
+export interface WalletStats {
+  address: string;
+  totalInflow: number;
+  totalOutflow: number;
+  netBalance: number;
+  inflowCount: number;
+  outflowCount: number;
+  totalTxCount: number;
+  avgInflowSize: number;
+  avgOutflowSize: number;
+  firstTxDate: Date;
+  lastTxDate: Date;
+  topCounterparties: { address: string; volume: number; count: number }[];
+  peakActivityHour: number;
+  activityScore: number;
 }

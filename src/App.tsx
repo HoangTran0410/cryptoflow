@@ -10,6 +10,7 @@ import ForensicsDashboard from "./components/ForensicsDashboard";
 import PathFinder from "./components/PathFinder";
 import TimelineTracer from "./components/TimelineTracer";
 import TaintChart from "./components/TaintChart";
+import WalletAnalysis from "./components/WalletAnalysis";
 import { calculateSummary, getDailyVolume } from "./utils/analytics";
 import {
   LayoutDashboard,
@@ -32,6 +33,7 @@ type Tab =
   | "path-finder"
   | "timeline"
   | "taint"
+  | "wallet-analysis"
   | "transactions";
 
 const App: React.FC = () => {
@@ -65,7 +67,8 @@ const App: React.FC = () => {
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "overview", label: "Dashboard", icon: LayoutDashboard },
     { id: "transactions", label: "Transactions", icon: Wallet },
-    { id: "money-flow", label: "Money Flow Analysis", icon: TrendingUp },
+    { id: "wallet-analysis", label: "Wallet Analysis", icon: TrendingUp },
+    { id: "money-flow", label: "Money Flow Analysis", icon: Share2 },
     { id: "interactive", label: "Interactive Graph", icon: Network },
     { id: "path-finder", label: "Path Finder", icon: Route },
     { id: "timeline", label: "Timeline Tracer", icon: Calendar },
@@ -231,6 +234,21 @@ const App: React.FC = () => {
             >
               {visitedTabs.has("taint") && (
                 <TaintChart transactions={transactions} />
+              )}
+            </div>
+
+            {/* Lazy load Wallet Analysis */}
+            <div
+              style={{
+                display: activeTab === "wallet-analysis" ? "block" : "none",
+              }}
+              className="h-full"
+            >
+              {visitedTabs.has("wallet-analysis") && (
+                <WalletAnalysis
+                  transactions={transactions}
+                  initialAddress={summary.topAddress}
+                />
               )}
             </div>
 

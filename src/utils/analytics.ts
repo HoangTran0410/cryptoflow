@@ -1063,3 +1063,213 @@ export const getTransactionTimeline = (
     (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
   );
 };
+
+// ===== WALLET ANALYSIS FUNCTIONS =====
+
+import { WalletTimeSeries, DailyTransactionCount, WalletStats } from "../types";
+
+/**
+ * Get all unique wallet addresses from transactions
+ */
+export const getAllWalletAddresses = (
+  transactions: Transaction[]
+): string[] => {
+  const addresses = new Set<string>();
+  transactions.forEach((tx) => {
+    addresses.add(tx.from);
+    addresses.add(tx.to);
+  });
+  return Array.from(addresses).sort();
+};
+
+/**
+ * Get comprehensive statistics for a specific wallet
+ */
+export const getWalletStatistics = (
+  transactions: Transaction[],
+  walletAddress: string
+): WalletStats => {
+  const inflows = transactions.filter((tx) => tx.to === walletAddress);
+  const outflows = transactions.filter((tx) => tx.from === walletAddress);
+  const allTxs = [...inflows, ...outflows].sort(
+    (a, b) => a.date.getTime() - b.date.getTime()
+  );
+
+  const totalInflow = inflows.reduce((sum, tx) => sum + tx.amount, 0);
+  const totalOutflow = outflows.reduce((sum, tx) => sum + tx.amount, 0);
+
+  // Calculate counterparties
+  const counterpartyMap = new Map<string, { volume: number; count: number }>();
+
+  inflows.forEach((tx) => {
+    const existing = counterpartyMap.get(tx.from) || { volume: 0, count: 0 };
+    counterpartyMap.set(tx.from, {
+      volume: existing.volume + tx.amount,
+      count: existing.count + 1,
+    });
+  });
+
+  outflows.forEach((tx) => {
+    const existing = counterpartyMap.get(tx.to) || { volume: 0, count: 0 };
+    counterpartyMap.set(tx.to, {
+      volume: existing.volume + tx.amount,
+      count: existing.count + 1,
+    });
+  });
+
+  const topCounterparties = Array.from(counterpartyMap.entries())
+    .map(([address, data]) => ({
+      address,
+      volume: data.volume,
+      count: data.count,
+    }))
+    .sort((a, b) => b.volume - a.volume)
+    .slice(0, 10);
+
+  // Calculate peak activity hour
+  const hourCounts = new Map<number, number>();
+  allTxs.forEach((tx) => {
+    const hour = tx.date.getHours();
+    hourCounts.set(hour, (hourCounts.get(hour) || 0) + 1);
+  });
+
+  let peakHour = 0;
+  let maxCount = 0;
+  hourCounts.forEach((count, hour) => {
+    if (count > maxCount) {
+      maxCount = count;
+      peakHour = hour;
+    }
+  });
+
+  // Calculate activity score (0-100)
+  const totalTxCount = allTxs.length;
+  const totalVolume = totalInflow + totalOutflow;
+  const activityScore = Math.min(
+    100,
+    totalTxCount * 2 + Math.log10(totalVolume + 1) * 10
+  );
+
+  return {
+    address: walletAddress,
+    totalInflow,
+    totalOutflow,
+    netBalance: totalInflow - totalOutflow,
+    inflowCount: inflows.length,
+    outflowCount: outflows.length,
+    totalTxCount,
+    avgInflowSize: inflows.length > 0 ? totalInflow / inflows.length : 0,
+    avgOutflowSize: outflows.length > 0 ? totalOutflow / outflows.length : 0,
+    firstTxDate: allTxs.length > 0 ? allTxs[0].date : new Date(),
+    lastTxDate: allTxs.length > 0 ? allTxs[allTxs.length - 1].date : new Date(),
+    topCounterparties,
+    peakActivityHour: peakHour,
+    activityScore,
+  };
+};
+
+/**
+ * Get time series data for wallet transaction volume
+ */
+export const getWalletVolumeOverTime = (
+  transactions: Transaction[],
+  walletAddress: string,
+  interval: "daily" | "weekly" | "monthly" = "daily"
+): WalletTimeSeries[] => {
+  const dataMap = new Map<
+    string,
+    {
+      inflow: number;
+      outflow: number;
+      inflowCount: number;
+      outflowCount: number;
+    }
+  >();
+
+  const getDateKey = (date: Date): string => {
+    if (interval === "daily") {
+      return date.toISOString().split("T")[0];
+    } else if (interval === "weekly") {
+      const d = new Date(date);
+      const dayOfWeek = d.getDay();
+      const diff = d.getDate() - dayOfWeek;
+      const weekStart = new Date(d.setDate(diff));
+      return weekStart.toISOString().split("T")[0];
+    } else {
+      // monthly
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+        2,
+        "0"
+      )}`;
+    }
+  };
+
+  transactions.forEach((tx) => {
+    const dateKey = getDateKey(tx.date);
+    const existing = dataMap.get(dateKey) || {
+      inflow: 0,
+      outflow: 0,
+      inflowCount: 0,
+      outflowCount: 0,
+    };
+
+    if (tx.to === walletAddress) {
+      existing.inflow += tx.amount;
+      existing.inflowCount += 1;
+    } else if (tx.from === walletAddress) {
+      existing.outflow += tx.amount;
+      existing.outflowCount += 1;
+    }
+
+    dataMap.set(dateKey, existing);
+  });
+
+  return Array.from(dataMap.entries())
+    .map(([date, data]) => ({
+      date,
+      inflow: data.inflow,
+      outflow: data.outflow,
+      netFlow: data.inflow - data.outflow,
+      inflowCount: data.inflowCount,
+      outflowCount: data.outflowCount,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+};
+
+/**
+ * Get daily transaction counts for a wallet
+ */
+export const getWalletTransactionCount = (
+  transactions: Transaction[],
+  walletAddress: string
+): DailyTransactionCount[] => {
+  const dataMap = new Map<
+    string,
+    { inflowCount: number; outflowCount: number }
+  >();
+
+  transactions.forEach((tx) => {
+    const dateKey = tx.date.toISOString().split("T")[0];
+    const existing = dataMap.get(dateKey) || {
+      inflowCount: 0,
+      outflowCount: 0,
+    };
+
+    if (tx.to === walletAddress) {
+      existing.inflowCount += 1;
+    } else if (tx.from === walletAddress) {
+      existing.outflowCount += 1;
+    }
+
+    dataMap.set(dateKey, existing);
+  });
+
+  return Array.from(dataMap.entries())
+    .map(([date, data]) => ({
+      date,
+      inflowCount: data.inflowCount,
+      outflowCount: data.outflowCount,
+      totalCount: data.inflowCount + data.outflowCount,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+};
