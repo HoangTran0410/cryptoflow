@@ -6,7 +6,15 @@ import { exportData } from "../utils/export";
 import LoadingSpinner from "./shared/LoadingSpinner";
 import SeverityBadge from "./shared/SeverityBadge";
 import ExportButton from "./shared/ExportButton";
-import { Shield, AlertTriangle, Network, X, RefreshCw } from "lucide-react";
+import {
+  Shield,
+  AlertTriangle,
+  Network,
+  X,
+  RefreshCw,
+  Activity,
+} from "lucide-react";
+import TransactionTable from "./TransactionTable";
 
 interface ForensicsDashboardProps {
   transactions: Transaction[];
@@ -23,6 +31,9 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
   const [loadingMessage, setLoadingMessage] = useState("Initializing...");
   const [selectedPattern, setSelectedPattern] =
     useState<SuspiciousPattern | null>(null);
+  const [selectedCluster, setSelectedCluster] = useState<AddressCluster | null>(
+    null
+  );
 
   // Run pattern detection
   const runAnalysis = useCallback(async () => {
@@ -223,13 +234,14 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
           <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
             <div className="max-h-96 overflow-y-auto">
               {clusters.slice(0, 10).map((cluster, idx) => (
-                <div
+                <button
                   key={cluster.clusterId}
-                  className="border-b border-slate-800 last:border-b-0 p-4 hover:bg-slate-800/30 transition-colors"
+                  onClick={() => setSelectedCluster(cluster)}
+                  className="w-full text-left border-b border-slate-800 last:border-b-0 p-4 hover:bg-slate-800/30 transition-colors group"
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <span className="text-indigo-400 font-mono text-sm font-semibold">
+                      <span className="text-indigo-400 font-mono text-sm font-semibold group-hover:text-indigo-300 transition-colors">
                         {cluster.clusterId}
                       </span>
                       <p className="text-slate-400 text-xs mt-1">
@@ -261,7 +273,7 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
                       </span>
                     </span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -271,7 +283,7 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
       {/* Pattern Detail Modal */}
       {selectedPattern && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-slate-800 flex items-start justify-between">
               <div>
                 <h3 className="text-xl font-bold text-white capitalize mb-2">
@@ -312,7 +324,7 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
                 </div>
               </div>
 
-              <div>
+              {/* <div>
                 <h4 className="text-white font-semibold mb-3">
                   Sample Affected Addresses
                 </h4>
@@ -333,6 +345,37 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
                       addresses
                     </p>
                   )}
+                </div>
+              </div> */}
+
+              {/* Address List */}
+              <div className="mb-6">
+                <h4 className="text-white font-semibold mb-3">
+                  Affected Addresses
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedPattern.affectedAddresses.map((addr) => (
+                    <span
+                      key={addr}
+                      className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-xs font-mono border border-slate-700"
+                    >
+                      {addr}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Transactions Table */}
+              <div>
+                <h4 className="text-white font-semibold mb-4 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-slate-400" />
+                  Pattern Transactions
+                </h4>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden h-[450px]">
+                  <TransactionTable
+                    showHeader={false}
+                    transactions={selectedPattern.transactions}
+                  />
                 </div>
               </div>
             </div>
@@ -356,6 +399,116 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
               >
                 Export Pattern Data
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cluster Detail Modal */}
+      {selectedCluster && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-5xl w-full max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-800 flex items-start justify-between bg-slate-900/50">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <Network className="w-6 h-6 text-indigo-400" />
+                  <h3 className="text-xl font-bold text-white">
+                    Cluster Details
+                  </h3>
+                </div>
+                <p className="text-slate-400 text-sm font-mono">
+                  {selectedCluster.clusterId}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedCluster(null)}
+                className="text-slate-400 hover:text-white transition-colors p-1 hover:bg-slate-800 rounded-lg"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              {/* Cluster Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                  <p className="text-slate-500 text-xs mb-1 uppercase tracking-wider">
+                    Confidence
+                  </p>
+                  <p className="text-indigo-400 text-2xl font-bold">
+                    {(selectedCluster.confidenceScore * 100).toFixed(0)}%
+                  </p>
+                </div>
+                <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                  <p className="text-slate-500 text-xs mb-1 uppercase tracking-wider">
+                    Addresses
+                  </p>
+                  <p className="text-white text-2xl font-bold">
+                    {selectedCluster.addresses.length}
+                  </p>
+                </div>
+                <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                  <p className="text-slate-500 text-xs mb-1 uppercase tracking-wider">
+                    Total Volume
+                  </p>
+                  <p className="text-white text-2xl font-bold">
+                    {selectedCluster.totalVolume.toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                  <p className="text-slate-500 text-xs mb-1 uppercase tracking-wider">
+                    Transactions
+                  </p>
+                  <p className="text-white text-2xl font-bold">
+                    {selectedCluster.transactionCount}
+                  </p>
+                </div>
+              </div>
+
+              {/* Behavior Description */}
+              <div className="bg-indigo-900/20 border border-indigo-500/20 rounded-xl p-4">
+                <h4 className="text-indigo-300 font-semibold mb-2 text-sm">
+                  Detected Behavior
+                </h4>
+                <p className="text-indigo-100/80 text-sm">
+                  {selectedCluster.commonBehavior}
+                </p>
+              </div>
+
+              {/* Address List */}
+              <div>
+                <h4 className="text-white font-semibold mb-3 text-sm">
+                  Clustered Addresses
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedCluster.addresses.map((addr) => (
+                    <span
+                      key={addr}
+                      className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-xs font-mono border border-slate-700"
+                    >
+                      {addr}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Transactions Table */}
+              <div>
+                <h4 className="text-white font-semibold mb-4 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-slate-400" />
+                  Cluster Transactions
+                </h4>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden h-[450px]">
+                  <TransactionTable
+                    showHeader={false}
+                    transactions={transactions.filter(
+                      (tx) =>
+                        selectedCluster.addresses.includes(tx.from) ||
+                        selectedCluster.addresses.includes(tx.to)
+                    )}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>

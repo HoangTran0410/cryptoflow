@@ -3,6 +3,7 @@ import { Transaction } from "../types";
 import { ChevronDown, ChevronUp, Search, Wallet } from "lucide-react";
 
 interface TransactionTableProps {
+  showHeader?: boolean;
   transactions: Transaction[];
 }
 
@@ -11,6 +12,7 @@ const HEADER_HEIGHT = 50; // px
 const VIEWPORT_HEIGHT = 600; // px
 
 const TransactionTable: React.FC<TransactionTableProps> = ({
+  showHeader = true,
   transactions,
 }) => {
   const [sortField, setSortField] = useState<keyof Transaction>("date");
@@ -124,17 +126,19 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   return (
     <div className="flex flex-col h-full gap-4">
       {/* Header */}
-      <div className="flex items-center gap-3 shrink-0">
-        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
-          <Wallet className="w-6 h-6 text-white" />
+      {showHeader && (
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <Wallet className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-white">Transactions</h2>
+            <p className="text-slate-400 text-sm">
+              Full history of all processed transactions
+            </p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-2xl font-bold text-white">Transactions</h2>
-          <p className="text-slate-400 text-sm">
-            Full history of all processed transactions
-          </p>
-        </div>
-      </div>
+      )}
       <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden flex flex-col h-full">
         <div className="p-5 border-b border-slate-800 flex flex-col md:flex-row justify-between md:items-center gap-4 shrink-0">
           <h3 className="text-lg font-semibold text-white">
@@ -146,7 +150,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           {/* Header */}
           <div className="bg-slate-950/50 text-slate-200 font-medium uppercase text-xs border-b border-slate-800 flex shrink-0 pr-4">
             {/* Date Column */}
-            <div className="flex-1 px-4 py-3 border-r border-slate-800/50">
+            <div className="flex-[2] px-4 py-3 border-r border-slate-800/50">
               <div
                 className="flex items-center gap-1 cursor-pointer hover:text-white mb-2"
                 onClick={() => handleSort("date")}
@@ -261,8 +265,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                     key={tx.id}
                     className="flex border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors h-[48px] items-center text-sm"
                   >
-                    <div className="flex-1 px-4 whitespace-nowrap text-slate-300">
-                      {tx.date.toLocaleDateString()}
+                    <div className="flex-[2] px-4 whitespace-nowrap text-slate-300">
+                      {tx.date.toLocaleString()}
                     </div>
                     <div className="flex-[2] px-4 truncate" title={tx.from}>
                       <span className="px-2 py-1 rounded text-xs font-mono bg-slate-800 border border-slate-700 text-slate-300">
