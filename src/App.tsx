@@ -30,7 +30,7 @@ type Tab =
   | "interactive"
   | "money-flow"
   | "forensics"
-  | "path-explorer"
+  // | "path-explorer"
   | "path-finder"
   | "timeline"
   | "taint"
@@ -66,10 +66,10 @@ const App: React.FC = () => {
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "overview", label: "Dashboard", icon: LayoutDashboard },
-    { id: "transactions", label: "Ledger", icon: Wallet },
+    { id: "transactions", label: "Transactions", icon: Wallet },
     { id: "money-flow", label: "Money Flow Analysis", icon: TrendingUp },
     { id: "interactive", label: "Interactive Graph", icon: Network },
-    { id: "path-explorer", label: "Path Explorer", icon: GitBranch },
+    // { id: "path-explorer", label: "Path Explorer", icon: GitBranch },
     { id: "path-finder", label: "Path Finder", icon: Route },
     { id: "timeline", label: "Timeline Tracer", icon: Calendar },
     { id: "taint", label: "Taint Analysis", icon: Droplet },
@@ -206,7 +206,7 @@ const App: React.FC = () => {
             </div>
 
             {/* Lazy load Path Explorer */}
-            <div
+            {/* <div
               style={{
                 display: activeTab === "path-explorer" ? "block" : "none",
               }}
@@ -215,7 +215,7 @@ const App: React.FC = () => {
               {visitedTabs.has("path-explorer") && (
                 <PathExplorer transactions={transactions} />
               )}
-            </div>
+            </div> */}
 
             {/* Lazy load Path Finder */}
             <div

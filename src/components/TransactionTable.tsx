@@ -15,7 +15,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
 }) => {
   const [sortField, setSortField] = useState<keyof Transaction>("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [filter, setFilter] = useState("");
+
+  // Filters
+  const [fromFilter, setFromFilter] = useState("");
+  const [toFilter, setToFilter] = useState("");
+  const [minAmount, setMinAmount] = useState("");
+  const [amountFilterType, setAmountFilterType] = useState<"gt" | "lt">("gt");
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
 
   // Virtual Scroll State
   const [scrollTop, setScrollTop] = useState(0);
@@ -32,12 +39,41 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
 
   const filteredData = useMemo(() => {
     return transactions
-      .filter(
-        (t) =>
-          t.from.toLowerCase().includes(filter.toLowerCase()) ||
-          t.to.toLowerCase().includes(filter.toLowerCase()) ||
-          t.id.toLowerCase().includes(filter.toLowerCase())
-      )
+      .filter((t) => {
+        // From Filter
+        if (
+          fromFilter &&
+          !t.from.toLowerCase().includes(fromFilter.toLowerCase())
+        ) {
+          return false;
+        }
+        // To Filter
+        if (toFilter && !t.to.toLowerCase().includes(toFilter.toLowerCase())) {
+          return false;
+        }
+        // Amount Filter
+        if (minAmount) {
+          const val = parseFloat(minAmount);
+          if (!isNaN(val)) {
+            if (amountFilterType === "gt" && t.amount <= val) return false;
+            if (amountFilterType === "lt" && t.amount >= val) return false;
+          }
+        }
+        // Date Filter
+        if (dateStart) {
+          const start = new Date(dateStart);
+          if (t.date < start) return false;
+        }
+        if (dateEnd) {
+          const end = new Date(dateEnd);
+          // Set end date to end of day
+          const endDateTime = new Date(dateEnd);
+          endDateTime.setHours(23, 59, 59, 999);
+          if (t.date > endDateTime) return false;
+        }
+
+        return true;
+      })
       .sort((a, b) => {
         const aVal = a[sortField];
         const bVal = b[sortField];
@@ -49,7 +85,17 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
         if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
         return 0;
       });
-  }, [transactions, sortField, sortDirection, filter]);
+  }, [
+    transactions,
+    sortField,
+    sortDirection,
+    fromFilter,
+    toFilter,
+    minAmount,
+    amountFilterType,
+    dateStart,
+    dateEnd,
+  ]);
 
   // Virtualization Calculations
   const totalHeight = filteredData.length * ROW_HEIGHT;
@@ -94,47 +140,110 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           <h3 className="text-lg font-semibold text-white">
             Transaction Ledger ({filteredData.length.toLocaleString()})
           </h3>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search address or ID..."
-              className="bg-slate-950 border border-slate-700 text-slate-200 pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 w-full md:w-64"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
-          </div>
         </div>
 
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
           <div className="bg-slate-950/50 text-slate-200 font-medium uppercase text-xs border-b border-slate-800 flex shrink-0 pr-4">
-            {/* pr-4 accounts for scrollbar width approx */}
-            <div
-              className="flex-1 px-6 py-4 cursor-pointer hover:bg-slate-800/50 flex items-center gap-1"
-              onClick={() => handleSort("date")}
-            >
-              Date <SortIcon field="date" />
+            {/* Date Column */}
+            <div className="flex-1 px-4 py-3 border-r border-slate-800/50">
+              <div
+                className="flex items-center gap-1 cursor-pointer hover:text-white mb-2"
+                onClick={() => handleSort("date")}
+              >
+                Date <SortIcon field="date" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <input
+                  type="date"
+                  value={dateStart}
+                  onChange={(e) => setDateStart(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500"
+                  placeholder="Start"
+                />
+                <input
+                  type="date"
+                  value={dateEnd}
+                  onChange={(e) => setDateEnd(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500"
+                  placeholder="End"
+                />
+              </div>
             </div>
-            <div
-              className="flex-[2] px-6 py-4 cursor-pointer hover:bg-slate-800/50 flex items-center gap-1"
-              onClick={() => handleSort("from")}
-            >
-              From <SortIcon field="from" />
+
+            {/* From Column */}
+            <div className="flex-[2] px-4 py-3 border-r border-slate-800/50">
+              <div
+                className="flex items-center gap-1 cursor-pointer hover:text-white mb-2"
+                onClick={() => handleSort("from")}
+              >
+                From <SortIcon field="from" />
+              </div>
+              <div className="relative">
+                <Search className="absolute left-2 top-1.5 w-3 h-3 text-slate-500" />
+                <input
+                  type="text"
+                  value={fromFilter}
+                  onChange={(e) => setFromFilter(e.target.value)}
+                  placeholder="Filter address..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 pl-6 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
             </div>
-            <div
-              className="flex-[2] px-6 py-4 cursor-pointer hover:bg-slate-800/50 flex items-center gap-1"
-              onClick={() => handleSort("to")}
-            >
-              To <SortIcon field="to" />
+
+            {/* To Column */}
+            <div className="flex-[2] px-4 py-3 border-r border-slate-800/50">
+              <div
+                className="flex items-center gap-1 cursor-pointer hover:text-white mb-2"
+                onClick={() => handleSort("to")}
+              >
+                To <SortIcon field="to" />
+              </div>
+              <div className="relative">
+                <Search className="absolute left-2 top-1.5 w-3 h-3 text-slate-500" />
+                <input
+                  type="text"
+                  value={toFilter}
+                  onChange={(e) => setToFilter(e.target.value)}
+                  placeholder="Filter address..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 pl-6 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
             </div>
-            <div
-              className="flex-1 px-6 py-4 cursor-pointer hover:bg-slate-800/50 flex items-center justify-end gap-1"
-              onClick={() => handleSort("amount")}
-            >
-              Amount <SortIcon field="amount" />
+
+            {/* Amount Column */}
+            <div className="flex-1 px-4 py-3 border-r border-slate-800/50">
+              <div
+                className="flex items-center justify-end gap-1 cursor-pointer hover:text-white mb-2"
+                onClick={() => handleSort("amount")}
+              >
+                Amount <SortIcon field="amount" />
+              </div>
+              <div className="flex gap-1">
+                <select
+                  value={amountFilterType}
+                  onChange={(e) =>
+                    setAmountFilterType(e.target.value as "gt" | "lt")
+                  }
+                  className="bg-slate-900 border border-slate-700 rounded px-1 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="gt">&gt;</option>
+                  <option value="lt">&lt;</option>
+                </select>
+                <input
+                  type="number"
+                  value={minAmount}
+                  onChange={(e) => setMinAmount(e.target.value)}
+                  placeholder="Value..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 text-right"
+                />
+              </div>
             </div>
-            <div className="flex-1 px-6 py-4 text-right">Currency</div>
+
+            {/* Currency Column - No filter for now */}
+            <div className="flex-1 px-4 py-3 text-right flex items-center justify-end">
+              Currency
+            </div>
           </div>
 
           {/* Virtual List Container */}
@@ -152,23 +261,23 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                     key={tx.id}
                     className="flex border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors h-[48px] items-center text-sm"
                   >
-                    <div className="flex-1 px-6 whitespace-nowrap text-slate-300">
+                    <div className="flex-1 px-4 whitespace-nowrap text-slate-300">
                       {tx.date.toLocaleDateString()}
                     </div>
-                    <div className="flex-[2] px-6 truncate" title={tx.from}>
+                    <div className="flex-[2] px-4 truncate" title={tx.from}>
                       <span className="px-2 py-1 rounded text-xs font-mono bg-slate-800 border border-slate-700 text-slate-300">
                         {tx.from}
                       </span>
                     </div>
-                    <div className="flex-[2] px-6 truncate" title={tx.to}>
+                    <div className="flex-[2] px-4 truncate" title={tx.to}>
                       <span className="px-2 py-1 rounded text-xs font-mono bg-slate-800 border border-slate-700 text-slate-300">
                         {tx.to}
                       </span>
                     </div>
-                    <div className="flex-1 px-6 text-right font-medium text-emerald-400">
+                    <div className="flex-1 px-4 text-right font-medium text-emerald-400">
                       {tx.amount.toLocaleString()}
                     </div>
-                    <div className="flex-1 px-6 text-right text-slate-500">
+                    <div className="flex-1 px-4 text-right text-slate-500">
                       {tx.currency}
                     </div>
                   </div>
