@@ -124,7 +124,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full gap-4">
+    <div className="flex flex-col h-full max-h-[calc(100vh-100px)] gap-4">
       {/* Header */}
       {showHeader && (
         <div className="flex items-center gap-3 shrink-0">

@@ -53,10 +53,8 @@ const WalletAnalysis: React.FC<WalletAnalysisProps> = ({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [showTaintAnalysis, setShowTaintAnalysis] = useState(false);
-  //   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [taintSourceAddress, setTaintSourceAddress] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [showAddressList, setShowAddressList] = useState(false);
 
   const allAddresses = useMemo(
     () => getAllWalletAddresses(transactions),
@@ -119,14 +117,6 @@ const WalletAnalysis: React.FC<WalletAnalysisProps> = ({
       return null;
     }
   }, [transactions, taintSourceAddress, selectedWallet, showTaintAnalysis]);
-
-  // Filter addresses for search
-  const filteredAddresses = useMemo(() => {
-    if (!searchQuery) return allAddresses;
-    return allAddresses.filter((addr) =>
-      addr.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [allAddresses, searchQuery]);
 
   const formatCurrency = (value: number) => {
     return `$${value.toLocaleString(undefined, {
@@ -219,57 +209,44 @@ const WalletAnalysis: React.FC<WalletAnalysisProps> = ({
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
                 type="text"
-                value={searchQuery || selectedWallet}
+                value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
-                  setShowAddressList(true);
                 }}
-                onFocus={() => setShowAddressList(true)}
                 placeholder="Search or paste wallet address..."
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               />
-            </div>
-            <button
-              onClick={() => setShowAddressList(!showAddressList)}
-              className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 hover:bg-slate-700 transition-colors flex items-center gap-2"
-            >
-              <ChevronDown
-                className={`w-4 h-4 transition-transform ${
-                  showAddressList ? "rotate-180" : ""
-                }`}
-              />
-              Browse
-            </button>
-          </div>
-
-          {/* Address dropdown */}
-          {showAddressList && (
-            <div className="absolute z-10 w-full mt-2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-64 overflow-y-auto">
-              {filteredAddresses.length === 0 ? (
-                <div className="p-4 text-slate-400 text-center">
-                  No addresses found
+              {/* Dropdown for filtered addresses */}
+              {searchQuery && (
+                <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                  {allAddresses
+                    .filter((addr) =>
+                      addr.toLowerCase().includes(searchQuery.toLowerCase())
+                    )
+                    .slice(0, 10)
+                    .map((address) => (
+                      <button
+                        key={address}
+                        onClick={() => {
+                          setSelectedWallet(address);
+                          setSearchQuery("");
+                        }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-slate-700 text-sm font-mono text-slate-300 hover:text-white transition-colors border-b border-slate-700/50 last:border-b-0"
+                      >
+                        {address}
+                      </button>
+                    ))}
+                  {allAddresses.filter((addr) =>
+                    addr.toLowerCase().includes(searchQuery.toLowerCase())
+                  ).length === 0 && (
+                    <div className="px-4 py-2.5 text-sm text-slate-500">
+                      No matching addresses found
+                    </div>
+                  )}
                 </div>
-              ) : (
-                filteredAddresses.slice(0, 50).map((addr) => (
-                  <button
-                    key={addr}
-                    onClick={() => {
-                      setSelectedWallet(addr);
-                      setSearchQuery("");
-                      setShowAddressList(false);
-                    }}
-                    className={`w-full text-left px-4 py-2.5 hover:bg-slate-700 transition-colors border-b border-slate-700/50 last:border-0 ${
-                      addr === selectedWallet
-                        ? "bg-indigo-500/10 text-indigo-400"
-                        : "text-slate-300"
-                    }`}
-                  >
-                    <div className="font-mono text-sm">{addr}</div>
-                  </button>
-                ))
               )}
             </div>
-          )}
+          </div>
         </div>
         {selectedWallet && (
           <div className="mt-3 text-xs text-slate-500">
