@@ -284,3 +284,22 @@ export interface WalletStats {
   peakActivityHour: number;
   activityScore: number;
 }
+
+// ===== ARKHAM TRACER TYPES =====
+
+export interface TracerWallet {
+  address: string;
+  laneIndex: number; // which vertical lane (0, 1, 2, ...)
+  yPosition: number; // vertical position within the lane
+  totalInflow: number;
+  totalOutflow: number;
+  txCount: number;
+}
+
+export interface TracerConnection {
+  fromAddress: string;
+  toAddress: string;
+  totalAmount: number;
+  txCount: number;
+  transactions: Transaction[];
+}

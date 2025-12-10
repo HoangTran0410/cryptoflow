@@ -11,6 +11,7 @@ import PathFinder from "./components/PathFinder";
 import TimelineTracer from "./components/TimelineTracer";
 import TaintChart from "./components/TaintChart";
 import WalletAnalysis from "./components/WalletAnalysis";
+import ArkhamTracer from "./components/ArkhamTracer";
 import { calculateSummary, getDailyVolume } from "./utils/analytics";
 import {
   LayoutDashboard,
@@ -23,6 +24,7 @@ import {
   Route,
   Calendar,
   Droplet,
+  Crosshair,
 } from "lucide-react";
 
 type Tab =
@@ -34,7 +36,8 @@ type Tab =
   | "timeline"
   | "taint"
   | "wallet-analysis"
-  | "transactions";
+  | "transactions"
+  | "arkham";
 
 const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -66,6 +69,7 @@ const App: React.FC = () => {
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "overview", label: "Dashboard", icon: LayoutDashboard },
+    { id: "arkham", label: "Arkham Tracer", icon: Crosshair },
     { id: "transactions", label: "Transactions", icon: Wallet },
     { id: "wallet-analysis", label: "Wallet Analysis", icon: TrendingUp },
     { id: "money-flow", label: "Money Flow Analysis", icon: Share2 },
@@ -245,10 +249,7 @@ const App: React.FC = () => {
               className="h-full"
             >
               {visitedTabs.has("wallet-analysis") && (
-                <WalletAnalysis
-                  transactions={transactions}
-                  initialAddress={summary.topAddress}
-                />
+                <WalletAnalysis transactions={transactions} />
               )}
             </div>
 
@@ -263,17 +264,26 @@ const App: React.FC = () => {
                 <TransactionTable transactions={transactions} />
               )}
             </div>
+
+            {/* Lazy load Arkham Tracer */}
+            <div
+              style={{
+                display: activeTab === "arkham" ? "block" : "none",
+              }}
+              className="h-full"
+            >
+              {visitedTabs.has("arkham") && (
+                <ArkhamTracer transactions={transactions} />
+              )}
+            </div>
           </div>
         )}
       </main>
-
-      {transactions.length > 0 && activeTab !== "interactive" && (
-        <footer className="border-t border-slate-900 mt-auto py-8 text-center">
-          <p className="text-slate-600 text-sm">
-            CryptoFlow Analytics • Local processing only
-          </p>
-        </footer>
-      )}
+      <footer className="border-t border-slate-900 mt-auto py-8 text-center">
+        <p className="text-slate-600 text-sm">
+          CryptoFlow Analytics • Local processing only
+        </p>
+      </footer>
     </div>
   );
 };
