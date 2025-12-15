@@ -874,7 +874,10 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
                 <h4 className="text-xs uppercase text-slate-500 font-bold tracking-wider">
                   Wallet Details
                 </h4>
-                <p className="text-white font-mono text-sm break-all mt-1">
+                <p
+                  className="text-white font-mono text-sm break-all mt-1 copyable"
+                  data-copy={selectedNodeId}
+                >
                   {selectedNodeId}
                 </p>
               </div>

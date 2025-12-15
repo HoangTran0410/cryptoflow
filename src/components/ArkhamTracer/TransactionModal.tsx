@@ -144,7 +144,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               </span>
             </div>
             <div>
-              <h3 className="text-white font-semibold">
+              <h3
+                className="text-white font-semibold copyable"
+                data-copy={walletAddress}
+              >
                 {formatAddress(walletAddress)}
               </h3>
               <div className="flex items-center gap-4 text-xs mt-0.5">
@@ -244,7 +247,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                     className="hover:bg-slate-800/50 transition-colors"
                   >
                     <td className="p-3">
-                      <span className="text-sm text-slate-200 font-mono">
+                      <span
+                        className="text-sm text-slate-200 font-mono copyable"
+                        data-copy={cp.address}
+                      >
                         {formatAddress(cp.address)}
                       </span>
                     </td>

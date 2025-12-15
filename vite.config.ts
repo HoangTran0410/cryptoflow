@@ -1,7 +1,6 @@
 import path from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig(({ mode }) => {
   return {
@@ -10,11 +9,30 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: "../",
       emptyOutDir: false,
+      assetsDir: "public",
       rollupOptions: {
         output: {
-          manualChunks: {
-            "react-vendor": ["react", "react-dom"],
-            "ui-vendor": ["lucide-react", "d3", "recharts", "tailwindcss"],
+          manualChunks(id) {
+            // Vendor chunks
+            if (id.includes("node_modules")) {
+              return "vendor";
+            }
+
+            for (const folder of [
+              "components",
+              // "assets",
+              // "visualizers",
+            ]) {
+              if (id.includes(`/${folder}/`)) {
+                const componentName = id.split(".")?.[0]?.split(`/`)?.at?.(-1);
+                console.log(id, componentName);
+                if (componentName) {
+                  return `${folder}/${componentName.toLowerCase()}`;
+                }
+              }
+            }
+
+            return "default";
           },
         },
       },
@@ -23,7 +41,7 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       host: "0.0.0.0",
     },
-    plugins: [tailwindcss(), react()],
+    plugins: [react()],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "."),

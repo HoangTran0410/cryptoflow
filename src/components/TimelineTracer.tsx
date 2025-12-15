@@ -328,7 +328,8 @@ const TimelineTracer: React.FC<TimelineTracerProps> = ({
                           .map((addr, idx) => (
                             <div
                               key={idx}
-                              className="bg-slate-800/50 rounded px-2 py-1 font-mono text-xs text-slate-300 truncate"
+                              className="bg-slate-800/50 rounded px-2 py-1 font-mono text-xs text-slate-300 truncate copyable"
+                              data-copy={addr}
                             >
                               {addr}
                             </div>

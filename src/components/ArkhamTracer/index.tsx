@@ -784,7 +784,10 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
                     </span>
                   </div>
                   <div className="min-w-0">
-                    <h3 className="text-white font-semibold truncate">
+                    <h3
+                      className="text-white font-semibold truncate copyable"
+                      data-copy={selectedWallet}
+                    >
                       {formatAddress(selectedWallet)}
                     </h3>
                     <div className="flex items-center gap-3 text-xs mt-0.5">
@@ -946,7 +949,10 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
                             >
                               {/* Address */}
                               <div className="flex-1 p-2 truncate">
-                                <span className="text-sm text-slate-200 font-mono">
+                                <span
+                                  className="text-sm text-slate-200 font-mono copyable"
+                                  data-copy={cp.address}
+                                >
                                   {formatAddress(cp.address)}
                                 </span>
                               </div>

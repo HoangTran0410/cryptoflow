@@ -276,8 +276,9 @@ const PathFinder: React.FC<PathFinderProps> = ({ transactions }) => {
                         </div>
                         <div className="flex-1 bg-slate-800/50 rounded px-3 py-2">
                           <p
-                            className="text-slate-300 font-mono text-xs truncate"
+                            className="text-slate-300 font-mono text-xs truncate copyable"
                             title={addr}
+                            data-copy={addr}
                           >
                             {addr}
                           </p>

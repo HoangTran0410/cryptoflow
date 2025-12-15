@@ -484,7 +484,8 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
                   {selectedCluster.addresses.map((addr) => (
                     <span
                       key={addr}
-                      className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-xs font-mono border border-slate-700"
+                      className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-xs font-mono border border-slate-700 copyable"
+                      data-copy={addr}
                     >
                       {addr}
                     </span>

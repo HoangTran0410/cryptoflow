@@ -269,12 +269,18 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                       {tx.date.toLocaleString()}
                     </div>
                     <div className="flex-[2] px-4 truncate" title={tx.from}>
-                      <span className="px-2 py-1 rounded text-xs font-mono bg-slate-800 border border-slate-700 text-slate-300">
+                      <span
+                        className="px-2 py-1 rounded text-xs font-mono bg-slate-800 border border-slate-700 text-slate-300 copyable"
+                        data-copy={tx.from}
+                      >
                         {tx.from}
                       </span>
                     </div>
                     <div className="flex-[2] px-4 truncate" title={tx.to}>
-                      <span className="px-2 py-1 rounded text-xs font-mono bg-slate-800 border border-slate-700 text-slate-300">
+                      <span
+                        className="px-2 py-1 rounded text-xs font-mono bg-slate-800 border border-slate-700 text-slate-300 copyable"
+                        data-copy={tx.to}
+                      >
                         {tx.to}
                       </span>
                     </div>

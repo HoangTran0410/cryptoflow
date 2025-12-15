@@ -382,7 +382,9 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
                           s.netFlow > 0 ? "bg-emerald-500" : "bg-orange-500"
                         }`}
                       ></span>
-                      {s.address}
+                      <span className="copyable" data-copy={s.address}>
+                        {s.address}
+                      </span>
                       {(s.address.includes("_") ||
                         s.address.includes("Whale")) && (
                         <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-900/50 text-indigo-300 border border-indigo-800/50">
@@ -531,7 +533,8 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
                             From
                           </span>
                           <span
-                            className="text-sm font-mono text-indigo-300 truncate"
+                            className="text-sm font-mono text-indigo-300 truncate copyable"
+                            data-copy={pair.from}
                             title={pair.from}
                           >
                             {pair.from}
@@ -550,7 +553,8 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
                             To
                           </span>
                           <span
-                            className="text-sm font-mono text-emerald-300 truncate"
+                            className="text-sm font-mono text-emerald-300 truncate copyable"
+                            data-copy={pair.to}
                             title={pair.to}
                           >
                             {pair.to}

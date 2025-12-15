@@ -1,18 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Transaction } from "./types";
-import FileUpload from "./components/FileUpload";
-import SummaryStats from "./components/SummaryStats";
-import ChartsSection from "./components/ChartsSection";
-import TransactionTable from "./components/TransactionTable";
-import MoneyFlow from "./components/MoneyFlow";
-import UnifiedGraph from "./components/UnifiedGraph";
-import ForensicsDashboard from "./components/ForensicsDashboard";
-import PathFinder from "./components/PathFinder";
-import TimelineTracer from "./components/TimelineTracer";
-import TaintChart from "./components/TaintChart";
-import WalletAnalysis from "./components/WalletAnalysis";
-import ArkhamTracer from "./components/ArkhamTracer";
 import { calculateSummary, getDailyVolume } from "./utils/analytics";
+import { useCopyable } from "./hooks/useCopyable";
 import {
   LayoutDashboard,
   Wallet,
@@ -26,6 +15,51 @@ import {
   Droplet,
   Crosshair,
 } from "lucide-react";
+import loadable from "@loadable/component";
+import { LoadingFallback } from "./utils/loader";
+
+const FileUpload = loadable(() => import("./components/FileUpload"), {
+  fallback: LoadingFallback,
+});
+const SummaryStats = loadable(() => import("./components/SummaryStats"), {
+  fallback: LoadingFallback,
+});
+const ChartsSection = loadable(() => import("./components/ChartsSection"), {
+  fallback: LoadingFallback,
+});
+const TransactionTable = loadable(
+  () => import("./components/TransactionTable"),
+  {
+    fallback: LoadingFallback,
+  }
+);
+const MoneyFlow = loadable(() => import("./components/MoneyFlow"), {
+  fallback: LoadingFallback,
+});
+const UnifiedGraph = loadable(() => import("./components/UnifiedGraph"), {
+  fallback: LoadingFallback,
+});
+const ForensicsDashboard = loadable(
+  () => import("./components/ForensicsDashboard"),
+  {
+    fallback: LoadingFallback,
+  }
+);
+const PathFinder = loadable(() => import("./components/PathFinder"), {
+  fallback: LoadingFallback,
+});
+const TimelineTracer = loadable(() => import("./components/TimelineTracer"), {
+  fallback: LoadingFallback,
+});
+const TaintChart = loadable(() => import("./components/TaintChart"), {
+  fallback: LoadingFallback,
+});
+const WalletAnalysis = loadable(() => import("./components/WalletAnalysis"), {
+  fallback: LoadingFallback,
+});
+const ArkhamTracer = loadable(() => import("./components/ArkhamTracer"), {
+  fallback: LoadingFallback,
+});
 
 type Tab =
   | "overview"
@@ -40,6 +74,9 @@ type Tab =
   | "arkham";
 
 const App: React.FC = () => {
+  // Enable global copy functionality for .copyable elements
+  useCopyable();
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   // Track which tabs have been visited to lazy load them
@@ -70,13 +107,13 @@ const App: React.FC = () => {
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "overview", label: "Dashboard", icon: LayoutDashboard },
     { id: "arkham", label: "Arkham Tracer", icon: Crosshair },
+    { id: "money-flow", label: "Money Flow Analysis", icon: Share2 },
     { id: "transactions", label: "Transactions", icon: Wallet },
     { id: "wallet-analysis", label: "Wallet Analysis", icon: TrendingUp },
-    { id: "money-flow", label: "Money Flow Analysis", icon: Share2 },
     { id: "interactive", label: "Interactive Graph", icon: Network },
     { id: "path-finder", label: "Path Finder", icon: Route },
     { id: "timeline", label: "Timeline Tracer", icon: Calendar },
-    { id: "taint", label: "Taint Analysis", icon: Droplet },
+    // { id: "taint", label: "Taint Analysis", icon: Droplet },
     { id: "forensics", label: "Forensics Suite", icon: Shield },
   ];
 
@@ -232,14 +269,14 @@ const App: React.FC = () => {
             </div>
 
             {/* Lazy load Taint Analysis */}
-            <div
+            {/* <div
               style={{ display: activeTab === "taint" ? "block" : "none" }}
               className="h-full"
             >
               {visitedTabs.has("taint") && (
                 <TaintChart transactions={transactions} />
               )}
-            </div>
+            </div> */}
 
             {/* Lazy load Wallet Analysis */}
             <div
