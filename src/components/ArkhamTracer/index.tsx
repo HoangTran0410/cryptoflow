@@ -22,6 +22,7 @@ import {
   Spline,
   Minus,
   GitBranch,
+  Download,
 } from "lucide-react";
 import loadable from "@loadable/component";
 import { LoadingFallback } from "@/src/utils/loader";
@@ -71,8 +72,6 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
   const [panelWidth, setPanelWidth] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
   const resizeStartRef = useRef({ x: 0, width: 400 });
-  const tableContainerRef = useRef<HTMLDivElement>(null);
-  const mainContainerRef = useRef<HTMLDivElement>(null);
 
   // Refs
   const svgRef = useRef<SVGSVGElement>(null);
@@ -365,20 +364,153 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
   };
 
   const handleFitView = () => {
-    if (!svgRef.current || !containerRef.current || !zoomRef.current) return;
+    if (
+      !svgRef.current ||
+      !containerRef.current ||
+      !zoomRef.current ||
+      wallets.length === 0
+    )
+      return;
 
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
 
-    const initialTransform = zoomIdentity
-      .translate(width / 4, height / 3)
-      .scale(0.8);
+    // Calculate bounding box of all wallets
+    const walletAddresses = wallets.map((w) => w.address);
+    const positions = walletAddresses
+      .map((addr) => walletPositions.get(addr))
+      .filter(Boolean);
+
+    if (positions.length === 0) return;
+
+    const padding = 100;
+    const minX = Math.min(...positions.map((p) => p!.leftEdge)) - padding;
+    const maxX = Math.max(...positions.map((p) => p!.rightEdge)) + padding;
+    const minY = Math.min(...positions.map((p) => p!.y)) - padding;
+    const maxY =
+      Math.max(...positions.map((p) => p!.y)) + CARD_HEIGHT + padding;
+
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+
+    // Calculate scale to fit content in viewport
+    const scaleX = width / contentWidth;
+    const scaleY = height / contentHeight;
+    const scale = Math.min(scaleX, scaleY, 1.5); // Cap at 1.5x zoom
+
+    // Calculate center position
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    // Create transform that centers and scales the content
+    const transform = zoomIdentity
+      .translate(width / 2, height / 2)
+      .scale(scale)
+      .translate(-centerX, -centerY);
 
     select(svgRef.current)
       .transition()
       .duration(500)
-      .call(zoomRef.current.transform, initialTransform);
+      .call(zoomRef.current.transform, transform);
   };
+
+  // Export SVG as image
+  const handleExportData = useCallback(() => {
+    if (!svgRef.current || wallets.length === 0) return;
+
+    try {
+      // Clone the SVG to avoid modifying the original
+      const svgElement = svgRef.current.cloneNode(true) as SVGSVGElement;
+
+      // Copy computed styles to inline styles for all elements
+      const copyStylesToInline = (
+        sourceElement: Element,
+        targetElement: Element
+      ) => {
+        const computedStyle = window.getComputedStyle(sourceElement);
+        const targetSvgElement = targetElement as SVGElement;
+
+        // Copy important style properties that affect rendering
+        const stylesToCopy = [
+          "width",
+          "height",
+          "fill",
+          "stroke",
+          "stroke-width",
+          "opacity",
+          "font-size",
+          "font-family",
+          "font-weight",
+        ];
+        stylesToCopy.forEach((prop) => {
+          const value = computedStyle.getPropertyValue(prop);
+          if (value && value !== "none" && value !== "auto") {
+            targetSvgElement.style.setProperty(prop, value);
+          }
+        });
+
+        // Recursively process children
+        Array.from(sourceElement.children).forEach((sourceChild, index) => {
+          const targetChild = targetElement.children[index];
+          if (targetChild) {
+            copyStylesToInline(sourceChild, targetChild);
+          }
+        });
+      };
+
+      // Apply styles from original to cloned SVG
+      if (svgRef.current) {
+        copyStylesToInline(svgRef.current, svgElement);
+      }
+
+      // Calculate bounding box based on wallet positions
+      const walletAddresses = wallets.map((w) => w.address);
+      const positions = walletAddresses
+        .map((addr) => walletPositions.get(addr))
+        .filter(Boolean);
+
+      if (positions.length === 0) return;
+
+      const padding = 100;
+      const minX = Math.min(...positions.map((p) => p!.leftEdge)) - padding;
+      const maxX = Math.max(...positions.map((p) => p!.rightEdge)) + padding;
+      const minY = Math.min(...positions.map((p) => p!.y)) - padding;
+      const maxY =
+        Math.max(...positions.map((p) => p!.y)) + CARD_HEIGHT + padding;
+
+      const width = maxX - minX;
+      const height = maxY - minY;
+
+      // Set viewBox to show all content
+      svgElement.setAttribute("viewBox", `${minX} ${minY} ${width} ${height}`);
+      svgElement.setAttribute("width", width.toString());
+      svgElement.setAttribute("height", height.toString());
+
+      // Remove transform from the g element since we're using viewBox
+      const gElement = svgElement.querySelector("g");
+      if (gElement) {
+        gElement.removeAttribute("transform");
+      }
+
+      // Serialize SVG to string
+      const serializer = new XMLSerializer();
+      const svgString = serializer.serializeToString(svgElement);
+
+      // Create blob and download
+      const blob = new Blob([svgString], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `arkham-tracer-${Date.now()}.svg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Export error:", error);
+      alert("Failed to export graph. Please try again.");
+    }
+  }, [wallets, walletPositions]);
 
   // Filter addresses for autocomplete
   const filteredAddresses = useMemo(() => {
@@ -556,6 +688,18 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
             </button>
           </div>
         </div>
+
+        {/* Export/Import */}
+        {wallets.length > 0 && (
+          <button
+            onClick={handleExportData}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 rounded-lg border border-slate-700"
+            title="Export graph as SVG image"
+          >
+            <Download className="w-4 h-4" />
+            Export SVG
+          </button>
+        )}
 
         {/* Clear All */}
         {wallets.length > 0 && (
