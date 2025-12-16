@@ -9,6 +9,9 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  X,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 interface MoneyFlowProps {
@@ -92,7 +95,72 @@ const getVisibleRange = (
 
 const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
   const [activeTab, setActiveTab] = useState<SubTab>("leaderboard");
-  const stats = useMemo(() => getWalletFlowStats(transactions), [transactions]);
+
+  // --- Date/Time Filters ---
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
+  const [timeStart, setTimeStart] = useState("");
+  const [timeEnd, setTimeEnd] = useState("");
+  const [dateFiltersCollapsed, setDateFiltersCollapsed] = useState(true);
+
+  // Filter transactions before aggregation
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((t) => {
+      // Date & Time Filter
+      if (dateStart) {
+        const start = new Date(dateStart);
+        if (t.date < start) return false;
+      }
+      if (dateEnd) {
+        const end = new Date(dateEnd);
+        if (t.date > end) return false;
+      }
+
+      // Time Range Filter (supports overnight ranges)
+      if (timeStart && timeEnd) {
+        const txHours = t.date.getHours();
+        const txMinutes = t.date.getMinutes();
+        const txTime = txHours * 60 + txMinutes;
+
+        const [startHour, startMin] = timeStart.split(":").map(Number);
+        const [endHour, endMin] = timeEnd.split(":").map(Number);
+        const startTimeInMin = startHour * 60 + startMin;
+        const endTimeInMin = endHour * 60 + endMin;
+
+        // Handle overnight range
+        if (startTimeInMin > endTimeInMin) {
+          if (txTime < startTimeInMin && txTime > endTimeInMin) {
+            return false;
+          }
+        } else {
+          if (txTime < startTimeInMin || txTime > endTimeInMin) {
+            return false;
+          }
+        }
+      } else if (timeStart) {
+        const txHours = t.date.getHours();
+        const txMinutes = t.date.getMinutes();
+        const txTime = txHours * 60 + txMinutes;
+        const [startHour, startMin] = timeStart.split(":").map(Number);
+        const startTimeInMin = startHour * 60 + startMin;
+        if (txTime < startTimeInMin) return false;
+      } else if (timeEnd) {
+        const txHours = t.date.getHours();
+        const txMinutes = t.date.getMinutes();
+        const txTime = txHours * 60 + txMinutes;
+        const [endHour, endMin] = timeEnd.split(":").map(Number);
+        const endTimeInMin = endHour * 60 + endMin;
+        if (txTime > endTimeInMin) return false;
+      }
+
+      return true;
+    });
+  }, [transactions, dateStart, dateEnd, timeStart, timeEnd]);
+
+  const stats = useMemo(
+    () => getWalletFlowStats(filteredTransactions),
+    [filteredTransactions]
+  );
 
   // --- State for Leaderboard ---
   const [leaderboardScroll, setLeaderboardScroll] = useState(0);
@@ -187,7 +255,7 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
       string,
       { from: string; to: string; amount: number; count: number }
     >();
-    transactions.forEach((t) => {
+    filteredTransactions.forEach((t) => {
       const key = `${t.from}|${t.to}`;
       const prev = pairMap.get(key) || {
         from: t.from,
@@ -202,7 +270,7 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
       });
     });
     return Array.from(pairMap.values()).sort((a, b) => b.amount - a.amount);
-  }, [transactions]);
+  }, [filteredTransactions]);
 
   const filteredPairs = useMemo(() => {
     if (!corridorSearch.from && !corridorSearch.to) return topPairs;
@@ -266,6 +334,116 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
             Aggregated wallet statistics and transfer corridor rankings
           </p>
         </div>
+      </div>
+
+      {/* Date/Time Filters */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-white">
+            Date & Time Filters
+          </h3>
+          <button
+            onClick={() => setDateFiltersCollapsed(!dateFiltersCollapsed)}
+            className="p-1 hover:bg-slate-700 rounded transition-colors"
+            title={dateFiltersCollapsed ? "Expand filters" : "Collapse filters"}
+          >
+            {dateFiltersCollapsed ? (
+              <ChevronDown className="w-4 h-4 text-slate-400" />
+            ) : (
+              <ChevronUp className="w-4 h-4 text-slate-400" />
+            )}
+          </button>
+        </div>
+
+        {!dateFiltersCollapsed && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label className="text-xs text-slate-400 uppercase tracking-wide">
+                Date Range
+              </label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="datetime-local"
+                    value={dateStart}
+                    onChange={(e) => setDateStart(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 pr-7 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                    placeholder="Start"
+                  />
+                  {dateStart && (
+                    <X
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 hover:text-slate-300 cursor-pointer"
+                      onClick={() => setDateStart("")}
+                    />
+                  )}
+                </div>
+                <div className="relative flex-1">
+                  <input
+                    type="datetime-local"
+                    value={dateEnd}
+                    onChange={(e) => setDateEnd(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 pr-7 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                    placeholder="End"
+                  />
+                  {dateEnd && (
+                    <X
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 hover:text-slate-300 cursor-pointer"
+                      onClick={() => setDateEnd("")}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-slate-400 uppercase tracking-wide">
+                Time Range (All Days)
+              </label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="time"
+                    value={timeStart}
+                    onChange={(e) => setTimeStart(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 pr-7 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                    placeholder="Start Time"
+                  />
+                  {timeStart && (
+                    <X
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 hover:text-slate-300 cursor-pointer"
+                      onClick={() => setTimeStart("")}
+                    />
+                  )}
+                </div>
+                <div className="relative flex-1">
+                  <input
+                    type="time"
+                    value={timeEnd}
+                    onChange={(e) => setTimeEnd(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 pr-7 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                    placeholder="End Time"
+                  />
+                  {timeEnd && (
+                    <X
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 hover:text-slate-300 cursor-pointer"
+                      onClick={() => setTimeEnd("")}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {dateFiltersCollapsed &&
+          (dateStart || dateEnd || timeStart || timeEnd) && (
+            <div className="text-xs text-indigo-400">
+              Active filters:{" "}
+              {[dateStart && "Date", timeStart && "Time"]
+                .filter(Boolean)
+                .join(" + ")}
+            </div>
+          )}
       </div>
 
       {/* Sub Tab Navigation */}

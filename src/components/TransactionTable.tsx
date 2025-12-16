@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Transaction } from "../types";
-import { ChevronDown, ChevronUp, Search, Wallet } from "lucide-react";
+import { ChevronDown, ChevronUp, Search, Wallet, X } from "lucide-react";
 import { formatAddress } from "../utils/helpers";
 
 interface TransactionTableProps {
@@ -26,6 +26,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   const [amountFilterType, setAmountFilterType] = useState<"gt" | "lt">("gt");
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
+  const [timeStart, setTimeStart] = useState("");
+  const [timeEnd, setTimeEnd] = useState("");
+  const [dateFiltersCollapsed, setDateFiltersCollapsed] = useState(true);
 
   // Virtual Scroll State
   const [scrollTop, setScrollTop] = useState(0);
@@ -62,17 +65,55 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             if (amountFilterType === "lt" && t.amount >= val) return false;
           }
         }
-        // Date Filter
+        // Date & Time Filter
         if (dateStart) {
           const start = new Date(dateStart);
           if (t.date < start) return false;
         }
         if (dateEnd) {
           const end = new Date(dateEnd);
-          // Set end date to end of day
-          const endDateTime = new Date(dateEnd);
-          endDateTime.setHours(23, 59, 59, 999);
-          if (t.date > endDateTime) return false;
+          if (t.date > end) return false;
+        }
+
+        // Time Range Filter (supports overnight ranges)
+        if (timeStart && timeEnd) {
+          const txHours = t.date.getHours();
+          const txMinutes = t.date.getMinutes();
+          const txTime = txHours * 60 + txMinutes; // Convert to minutes
+
+          const [startHour, startMin] = timeStart.split(":").map(Number);
+          const [endHour, endMin] = timeEnd.split(":").map(Number);
+          const startTimeInMin = startHour * 60 + startMin;
+          const endTimeInMin = endHour * 60 + endMin;
+
+          // Handle overnight range (e.g., 23:00 - 01:00)
+          if (startTimeInMin > endTimeInMin) {
+            // If tx time is NOT in the gap between end and start, it's valid
+            if (txTime < startTimeInMin && txTime > endTimeInMin) {
+              return false;
+            }
+          } else {
+            // Normal range (e.g., 08:00 - 17:00)
+            if (txTime < startTimeInMin || txTime > endTimeInMin) {
+              return false;
+            }
+          }
+        } else if (timeStart) {
+          // Only start time specified
+          const txHours = t.date.getHours();
+          const txMinutes = t.date.getMinutes();
+          const txTime = txHours * 60 + txMinutes;
+          const [startHour, startMin] = timeStart.split(":").map(Number);
+          const startTimeInMin = startHour * 60 + startMin;
+          if (txTime < startTimeInMin) return false;
+        } else if (timeEnd) {
+          // Only end time specified
+          const txHours = t.date.getHours();
+          const txMinutes = t.date.getMinutes();
+          const txTime = txHours * 60 + txMinutes;
+          const [endHour, endMin] = timeEnd.split(":").map(Number);
+          const endTimeInMin = endHour * 60 + endMin;
+          if (txTime > endTimeInMin) return false;
         }
 
         return true;
@@ -98,6 +139,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
     amountFilterType,
     dateStart,
     dateEnd,
+    timeStart,
+    timeEnd,
   ]);
 
   // Virtualization Calculations
@@ -152,28 +195,107 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           <div className="bg-slate-950/50 text-slate-200 font-medium uppercase text-xs border-b border-slate-800 flex shrink-0 pr-4">
             {/* Date Column */}
             <div className="flex-[2] px-4 py-3 border-r border-slate-800/50">
-              <div
-                className="flex items-center gap-1 cursor-pointer hover:text-white mb-2"
-                onClick={() => handleSort("date")}
-              >
-                Date <SortIcon field="date" />
+              <div className="flex items-center justify-between mb-2">
+                <div
+                  className="flex items-center gap-1 cursor-pointer hover:text-white"
+                  onClick={() => handleSort("date")}
+                >
+                  Date <SortIcon field="date" />
+                </div>
+                <button
+                  onClick={() => setDateFiltersCollapsed(!dateFiltersCollapsed)}
+                  className="p-0.5 hover:bg-slate-700 rounded transition-colors"
+                  title={
+                    dateFiltersCollapsed ? "Expand filters" : "Collapse filters"
+                  }
+                >
+                  {dateFiltersCollapsed ? (
+                    <ChevronDown className="w-3 h-3" />
+                  ) : (
+                    <ChevronUp className="w-3 h-3" />
+                  )}
+                </button>
               </div>
-              <div className="flex flex-col gap-1">
-                <input
-                  type="date"
-                  value={dateStart}
-                  onChange={(e) => setDateStart(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500"
-                  placeholder="Start"
-                />
-                <input
-                  type="date"
-                  value={dateEnd}
-                  onChange={(e) => setDateEnd(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500"
-                  placeholder="End"
-                />
-              </div>
+              {!dateFiltersCollapsed && (
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-1">
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={dateStart}
+                        onChange={(e) => setDateStart(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-1 pr-6 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500"
+                        placeholder="Start"
+                      />
+                      {dateStart && (
+                        <X
+                          className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 hover:text-slate-300 cursor-pointer"
+                          onClick={() => setDateStart("")}
+                        />
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={dateEnd}
+                        onChange={(e) => setDateEnd(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-1 pr-6 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500"
+                        placeholder="End"
+                      />
+                      {dateEnd && (
+                        <X
+                          className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 hover:text-slate-300 cursor-pointer"
+                          onClick={() => setDateEnd("")}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-[9px] text-slate-500 mb-0.5">
+                    Time Range (All Days)
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="relative">
+                      <input
+                        type="time"
+                        value={timeStart}
+                        onChange={(e) => setTimeStart(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-1 pr-6 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500"
+                        placeholder="Start Time"
+                      />
+                      {timeStart && (
+                        <X
+                          className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 hover:text-slate-300 cursor-pointer"
+                          onClick={() => setTimeStart("")}
+                        />
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="time"
+                        value={timeEnd}
+                        onChange={(e) => setTimeEnd(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-1 pr-6 text-[10px] text-slate-300 focus:outline-none focus:border-indigo-500"
+                        placeholder="End Time"
+                      />
+                      {timeEnd && (
+                        <X
+                          className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 hover:text-slate-300 cursor-pointer"
+                          onClick={() => setTimeEnd("")}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {dateFiltersCollapsed &&
+                (dateStart || dateEnd || timeStart || timeEnd) && (
+                  <div className="text-[9px] text-indigo-400 mt-1">
+                    {[dateStart && "Date", timeStart && "Time"]
+                      .filter(Boolean)
+                      .join(" + ")}{" "}
+                    filtered
+                  </div>
+                )}
             </div>
 
             {/* From Column */}
@@ -191,8 +313,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                   value={fromFilter}
                   onChange={(e) => setFromFilter(e.target.value)}
                   placeholder="Filter address..."
-                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 pl-6 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 pl-6 pr-6 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
                 />
+                {fromFilter && (
+                  <X
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 hover:text-slate-300 cursor-pointer"
+                    onClick={() => setFromFilter("")}
+                  />
+                )}
               </div>
             </div>
 
@@ -211,8 +339,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                   value={toFilter}
                   onChange={(e) => setToFilter(e.target.value)}
                   placeholder="Filter address..."
-                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 pl-6 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 pl-6 pr-6 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
                 />
+                {toFilter && (
+                  <X
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 hover:text-slate-300 cursor-pointer"
+                    onClick={() => setToFilter("")}
+                  />
+                )}
               </div>
             </div>
 
@@ -235,13 +369,21 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                   <option value="gt">&gt;</option>
                   <option value="lt">&lt;</option>
                 </select>
-                <input
-                  type="number"
-                  value={minAmount}
-                  onChange={(e) => setMinAmount(e.target.value)}
-                  placeholder="Value..."
-                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 text-right"
-                />
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    value={minAmount}
+                    onChange={(e) => setMinAmount(e.target.value)}
+                    placeholder="Value..."
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 pr-6 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 text-right"
+                  />
+                  {minAmount && (
+                    <X
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 hover:text-slate-300 cursor-pointer"
+                      onClick={() => setMinAmount("")}
+                    />
+                  )}
+                </div>
               </div>
             </div>
 
@@ -267,7 +409,16 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                     className="flex border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors h-[48px] items-center text-sm"
                   >
                     <div className="flex-[2] px-4 whitespace-nowrap text-slate-300">
-                      {tx.date.toLocaleString()}
+                      {tx.date.toLocaleString("vi-VN", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                        hour12: false,
+                        timeZone: "Asia/Ho_Chi_Minh",
+                      })}
                     </div>
                     <div className="flex-[2] px-4 truncate" title={tx.from}>
                       <span
