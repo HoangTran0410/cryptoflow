@@ -3,10 +3,6 @@ import { Transaction, PathFinderResult, TransactionPath } from "../types";
 import { useForensicsWorker } from "../hooks/useForensicsWorker";
 import { pathFinderCache, generateCacheKey } from "../utils/cache";
 import { exportData } from "../utils/export";
-import LoadingSpinner from "./shared/LoadingSpinner";
-import DepthSlider from "./shared/DepthSlider";
-import ExportButton from "./shared/ExportButton";
-import SeverityBadge from "./shared/SeverityBadge";
 import {
   Search,
   Star,
@@ -15,6 +11,21 @@ import {
   TrendingUp,
   Route,
 } from "lucide-react";
+import loadable from "@loadable/component";
+import { LoadingFallback } from "../utils/loader";
+
+const LoadingSpinner = loadable(() => import("./shared/LoadingSpinner"), {
+  fallback: LoadingFallback,
+});
+const DepthSlider = loadable(() => import("./shared/DepthSlider"), {
+  fallback: LoadingFallback,
+});
+const ExportButton = loadable(() => import("./shared/ExportButton"), {
+  fallback: LoadingFallback,
+});
+const SeverityBadge = loadable(() => import("./shared/SeverityBadge"), {
+  fallback: LoadingFallback,
+});
 
 interface PathFinderProps {
   transactions: Transaction[];
@@ -59,8 +70,11 @@ const PathFinder: React.FC<PathFinderProps> = ({ transactions }) => {
       }
     }
 
+    // @ts-ignore
     setResult(pathResult);
+    // @ts-ignore
     if (pathResult && pathResult.paths.length > 0) {
+      // @ts-ignore
       setSelectedPath(pathResult.shortestPath);
     }
     setIsLoading(false);

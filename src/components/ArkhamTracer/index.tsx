@@ -5,8 +5,12 @@ import React, {
   useMemo,
   useEffect,
 } from "react";
-import * as d3 from "d3";
-import { Transaction, TracerWallet, TracerConnection } from "../../types";
+import {
+  Transaction,
+  TracerWallet,
+  TracerConnection,
+  CombinedConnection,
+} from "../../types";
 import {
   Search,
   Plus,
@@ -15,17 +19,26 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize,
-  ArrowDownLeft,
-  ArrowUpRight,
+  Spline,
   Minus,
-  X,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  GripVertical,
+  GitBranch,
 } from "lucide-react";
-import WalletCard from "./WalletCard";
-import ConnectionRenderer from "./ConnectionRenderer";
+import loadable from "@loadable/component";
+import { LoadingFallback } from "@/src/utils/loader";
+import { select, type ZoomBehavior, zoom as d3zoom, zoomIdentity } from "d3";
+
+const WalletCard = loadable(() => import("./WalletCard"), {
+  fallback: LoadingFallback,
+});
+const ConnectionPanel = loadable(() => import("./ConnectionPanel"), {
+  fallback: LoadingFallback,
+});
+const ConnectionRenderer = loadable(() => import("./ConnectionRenderer"), {
+  fallback: LoadingFallback,
+});
+const WalletPanel = loadable(() => import("./WalletPanel"), {
+  fallback: LoadingFallback,
+});
 
 interface ArkhamTracerProps {
   transactions: Transaction[];
@@ -34,31 +47,27 @@ interface ArkhamTracerProps {
 const LANE_WIDTH = 250;
 const CARD_HEIGHT = 80;
 const CARD_GAP = 20;
-const ROW_HEIGHT = 56;
+const CARD_WIDTH = 180; // Width of wallet cards
 
-type SortColumn = "address" | "amount" | "count" | "time";
-type SortDirection = "asc" | "desc";
+type ConnectionStyle = "curve" | "straight" | "step";
 
 const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
   // State
   const [wallets, setWallets] = useState<TracerWallet[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
+  const [selectedConnection, setSelectedConnection] =
+    useState<CombinedConnection | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 });
+  const [connectionStyle, setConnectionStyle] =
+    useState<ConnectionStyle>("curve");
 
   // Dragging state
   const [draggedWallet, setDraggedWallet] = useState<string | null>(null);
   const dragStartRef = useRef({ x: 0, y: 0 });
   const dragWalletStartRef = useRef({ laneIndex: 0, yPosition: 0 });
 
-  // Transaction panel state
-  const [activeFlowTab, setActiveFlowTab] = useState<"inflows" | "outflows">(
-    "inflows"
-  );
-  const [panelSearchQuery, setPanelSearchQuery] = useState("");
-  const [scrollTop, setScrollTop] = useState(0);
-  const [sortColumn, setSortColumn] = useState<SortColumn>("amount");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  // Panel state
   const [panelWidth, setPanelWidth] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
   const resizeStartRef = useRef({ x: 0, width: 400 });
@@ -68,7 +77,7 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
   // Refs
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
 
   // Calculate wallet stats from transactions
   const walletStats = useMemo(() => {
@@ -133,24 +142,44 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
 
   // Calculate wallet positions - during drag, use temporary X position
   const walletPositions = useMemo(() => {
-    const positions = new Map<string, { x: number; y: number }>();
+    const positions = new Map<
+      string,
+      { x: number; y: number; leftEdge: number; rightEdge: number }
+    >();
     wallets.forEach((w) => {
-      const x = w.laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
+      const centerX = w.laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
       const y = w.yPosition;
-      positions.set(w.address, { x, y });
+      positions.set(w.address, {
+        x: centerX,
+        y,
+        leftEdge: centerX - CARD_WIDTH / 2,
+        rightEdge: centerX + CARD_WIDTH / 2,
+      });
     });
     return positions;
   }, [wallets]);
 
-  // Get lane range to display (supports negative lanes)
+  // Get lane range to display (supports negative lanes and vertical bounds)
   const laneRange = useMemo(() => {
-    if (wallets.length === 0) return { min: -2, max: 5 };
+    if (wallets.length === 0) {
+      return {
+        minX: -2,
+        maxX: 5,
+        minY: -500,
+        maxY: 1500,
+      };
+    }
     const lanes = wallets.map((w) => w.laneIndex);
+    const yPositions = wallets.map((w) => w.yPosition);
     const minLane = Math.min(...lanes);
     const maxLane = Math.max(...lanes);
+    const minY = Math.min(...yPositions);
+    const maxY = Math.max(...yPositions);
     return {
-      min: Math.min(-2, minLane - 2),
-      max: Math.max(5, maxLane + 3),
+      minX: Math.min(-2, minLane - 2),
+      maxX: Math.max(5, maxLane + 3),
+      minY: Math.min(-500, minY - 500),
+      maxY: Math.max(1500, maxY + 500),
     };
   }, [wallets]);
 
@@ -158,11 +187,10 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
   useEffect(() => {
     if (!svgRef.current || !containerRef.current) return;
 
-    const svg = d3.select(svgRef.current);
+    const svg = select(svgRef.current);
 
     // Create zoom behavior with filter to exclude wallet cards from panning but allow zoom
-    const zoom = d3
-      .zoom<SVGSVGElement, unknown>()
+    const zoom = d3zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 4])
       .filter((event) => {
         // Always allow wheel events (scroll zoom) everywhere
@@ -196,7 +224,7 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
     zoomRef.current = zoom;
 
     // Initial transform
-    const initialTransform = d3.zoomIdentity.translate(100, 200).scale(1);
+    const initialTransform = zoomIdentity.translate(100, 200).scale(1);
     svg.call(zoom.transform, initialTransform);
 
     return () => {
@@ -320,7 +348,7 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
   // Zoom controls
   const handleZoomIn = () => {
     if (svgRef.current && zoomRef.current) {
-      d3.select(svgRef.current)
+      select(svgRef.current)
         .transition()
         .duration(300)
         .call(zoomRef.current.scaleBy, 1.3);
@@ -329,7 +357,7 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
 
   const handleZoomOut = () => {
     if (svgRef.current && zoomRef.current) {
-      d3.select(svgRef.current)
+      select(svgRef.current)
         .transition()
         .duration(300)
         .call(zoomRef.current.scaleBy, 0.7);
@@ -342,11 +370,11 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
 
-    const initialTransform = d3.zoomIdentity
+    const initialTransform = zoomIdentity
       .translate(width / 4, height / 3)
       .scale(0.8);
 
-    d3.select(svgRef.current)
+    select(svgRef.current)
       .transition()
       .duration(500)
       .call(zoomRef.current.transform, initialTransform);
@@ -365,113 +393,6 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
       .slice(0, 5);
   }, [searchQuery, allAddresses, wallets]);
 
-  // Get selected wallet data for panel
-  const selectedWalletData = useMemo(() => {
-    if (!selectedWallet) return null;
-
-    const wallet = wallets.find((w) => w.address === selectedWallet);
-    if (!wallet) return null;
-
-    const inflows = transactions.filter((t) => t.to === selectedWallet);
-    const outflows = transactions.filter((t) => t.from === selectedWallet);
-
-    // Aggregate by counterparty
-    const counterpartyMap = new Map<
-      string,
-      {
-        address: string;
-        inflow: number;
-        outflow: number;
-        count: number;
-        lastTx: Date;
-      }
-    >();
-
-    inflows.forEach((t) => {
-      const existing = counterpartyMap.get(t.from) || {
-        address: t.from,
-        inflow: 0,
-        outflow: 0,
-        count: 0,
-        lastTx: t.date,
-      };
-      existing.inflow += t.amount;
-      existing.count++;
-      if (t.date > existing.lastTx) existing.lastTx = t.date;
-      counterpartyMap.set(t.from, existing);
-    });
-
-    outflows.forEach((t) => {
-      const existing = counterpartyMap.get(t.to) || {
-        address: t.to,
-        inflow: 0,
-        outflow: 0,
-        count: 0,
-        lastTx: t.date,
-      };
-      existing.outflow += t.amount;
-      existing.count++;
-      if (t.date > existing.lastTx) existing.lastTx = t.date;
-      counterpartyMap.set(t.to, existing);
-    });
-
-    return {
-      wallet,
-      inflows,
-      outflows,
-      counterparties: Array.from(counterpartyMap.values()),
-      totalInflow: inflows.reduce((sum, t) => sum + t.amount, 0),
-      totalOutflow: outflows.reduce((sum, t) => sum + t.amount, 0),
-    };
-  }, [selectedWallet, wallets, transactions]);
-
-  // Filter counterparties for panel
-  const filteredCounterparties = useMemo(() => {
-    if (!selectedWalletData) return [];
-
-    let filtered = selectedWalletData.counterparties;
-
-    if (activeFlowTab === "inflows") {
-      filtered = filtered.filter((c) => c.inflow > 0);
-    } else {
-      filtered = filtered.filter((c) => c.outflow > 0);
-    }
-
-    if (panelSearchQuery) {
-      filtered = filtered.filter((c) =>
-        c.address.toLowerCase().includes(panelSearchQuery.toLowerCase())
-      );
-    }
-
-    // Sort based on current sort column and direction
-    return filtered.sort((a, b) => {
-      let comparison = 0;
-      switch (sortColumn) {
-        case "address":
-          comparison = a.address.localeCompare(b.address);
-          break;
-        case "amount":
-          const aAmount = activeFlowTab === "inflows" ? a.inflow : a.outflow;
-          const bAmount = activeFlowTab === "inflows" ? b.inflow : b.outflow;
-          comparison = aAmount - bAmount;
-          break;
-        case "count":
-          comparison = a.count - b.count;
-          break;
-        case "time":
-          comparison = a.lastTx.getTime() - b.lastTx.getTime();
-          break;
-      }
-      return sortDirection === "desc" ? -comparison : comparison;
-    });
-  }, [
-    selectedWalletData,
-    activeFlowTab,
-    panelSearchQuery,
-    sortColumn,
-    sortDirection,
-  ]);
-
   const existingWalletSet = useMemo(
     () => new Set(wallets.map((w) => w.address)),
     [wallets]
@@ -482,54 +403,10 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
     return wallets.find((w) => w.address === selectedWallet)?.laneIndex;
   }, [selectedWallet, wallets]);
 
-  const formatAddress = (addr: string) => {
-    if (addr.length <= 14) return addr;
-    return `${addr.slice(0, 8)}...${addr.slice(-4)}`;
-  };
-
-  // Relative time formatter
-  const formatRelativeTime = (date: Date) => {
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffSecs = Math.floor(diffMs / 1000);
-    const diffMins = Math.floor(diffSecs / 60);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-    const diffWeeks = Math.floor(diffDays / 7);
-    const diffMonths = Math.floor(diffDays / 30);
-    const diffYears = Math.floor(diffDays / 365);
-
-    if (diffYears > 0) return `${diffYears}y ago`;
-    if (diffMonths > 0) return `${diffMonths}mo ago`;
-    if (diffWeeks > 0) return `${diffWeeks}w ago`;
-    if (diffDays > 0) return `${diffDays}d ago`;
-    if (diffHours > 0) return `${diffHours}h ago`;
-    if (diffMins > 0) return `${diffMins}m ago`;
-    return "just now";
-  };
-
-  // Toggle sort handler
-  const handleSort = (column: SortColumn) => {
-    if (sortColumn === column) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortColumn(column);
-      setSortDirection("desc");
-    }
-    setScrollTop(0); // Reset scroll on sort
-  };
-
-  // Sort icon component
-  const SortIcon = ({ column }: { column: SortColumn }) => {
-    if (sortColumn !== column) {
-      return <ArrowUpDown className="w-3 h-3 opacity-40" />;
-    }
-    return sortDirection === "desc" ? (
-      <ArrowDown className="w-3 h-3" />
-    ) : (
-      <ArrowUp className="w-3 h-3" />
-    );
-  };
+  const selectedWalletObj = useMemo(() => {
+    if (!selectedWallet) return null;
+    return wallets.find((w) => w.address === selectedWallet) || null;
+  }, [selectedWallet, wallets]);
 
   // Splitter resize handlers
   const handleResizeStart = useCallback(
@@ -640,6 +517,46 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
           </button>
         </div>
 
+        {/* Connection Style */}
+        <div className="flex items-center gap-1 border-l border-slate-800 pl-4">
+          {/* <span className="text-xs text-slate-500 mr-2">Connection:</span> */}
+          <div className="flex gap-1 bg-slate-950 rounded-lg p-1 border border-slate-700">
+            <button
+              onClick={() => setConnectionStyle("curve")}
+              className={`p-2 rounded transition-colors ${
+                connectionStyle === "curve"
+                  ? "bg-indigo-600 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Curved connections"
+            >
+              <Spline className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setConnectionStyle("straight")}
+              className={`p-2 rounded transition-colors ${
+                connectionStyle === "straight"
+                  ? "bg-indigo-600 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Straight line connections"
+            >
+              <Minus className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setConnectionStyle("step")}
+              className={`p-2 rounded transition-colors ${
+                connectionStyle === "step"
+                  ? "bg-indigo-600 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Step/elbow connections"
+            >
+              <GitBranch className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
         {/* Clear All */}
         {wallets.length > 0 && (
           <button
@@ -677,9 +594,9 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
               <linearGradient
                 id="laneGradient"
                 x1="0"
-                y1="-500"
+                y1={laneRange.minY}
                 x2="0"
-                y2="1500"
+                y2={laneRange.maxY}
                 gradientUnits="userSpaceOnUse"
               >
                 <stop offset="0%" stopColor="#475569" stopOpacity="0" />
@@ -694,16 +611,16 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
               transform={`translate(${transform.x}, ${transform.y}) scale(${transform.k})`}
             >
               {/* Lane lines */}
-              {Array.from({ length: laneRange.max - laneRange.min }).map(
+              {Array.from({ length: laneRange.maxX - laneRange.minX }).map(
                 (_, i) => {
-                  const laneIndex = laneRange.min + i;
+                  const laneIndex = laneRange.minX + i;
                   return (
                     <line
                       key={`lane-${laneIndex}`}
                       x1={laneIndex * LANE_WIDTH + LANE_WIDTH / 2}
-                      y1={-5000}
+                      y1={laneRange.minY}
                       x2={laneIndex * LANE_WIDTH + LANE_WIDTH / 2}
-                      y2={5000}
+                      y2={laneRange.maxY}
                       stroke="url(#laneGradient)"
                       strokeWidth={2}
                       strokeDasharray="8 4"
@@ -717,6 +634,23 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
                 connections={connections}
                 walletPositions={walletPositions}
                 transform={transform}
+                connectionStyle={connectionStyle}
+                selectedConnection={
+                  selectedConnection
+                    ? {
+                        from:
+                          selectedConnection.aToB?.fromAddress ||
+                          selectedConnection.addressA,
+                        to:
+                          selectedConnection.aToB?.toAddress ||
+                          selectedConnection.addressB,
+                      }
+                    : null
+                }
+                onConnectionClick={(combined) => {
+                  setSelectedConnection(combined);
+                  setSelectedWallet(null);
+                }}
               />
 
               {/* Wallet Cards */}
@@ -731,7 +665,10 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
                     isSelected={selectedWallet === wallet.address}
                     isDragging={draggedWallet === wallet.address}
                     position={pos}
-                    onSelect={() => setSelectedWallet(wallet.address)}
+                    onSelect={() => {
+                      setSelectedWallet(wallet.address);
+                      setSelectedConnection(null);
+                    }}
                     onDragStart={(e) => handleDragStart(e, wallet.address)}
                   />
                 );
@@ -758,7 +695,7 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
         </div>
 
         {/* Splitter + Side Panel */}
-        {selectedWallet && selectedWalletData && (
+        {selectedWallet && selectedWalletObj && (
           <>
             {/* Splitter */}
             <div
@@ -770,252 +707,41 @@ const ArkhamTracer: React.FC<ArkhamTracerProps> = ({ transactions }) => {
               <div className="w-1 h-16 bg-slate-700 group-hover:bg-indigo-500 transition-colors rounded" />
             </div>
 
-            {/* Side Panel - Transaction Table */}
+            {/* Wallet Panel Component */}
+            <div style={{ width: panelWidth }} className="shrink-0">
+              <WalletPanel
+                selectedWallet={selectedWallet}
+                wallet={selectedWalletObj}
+                transactions={transactions}
+                onClose={() => setSelectedWallet(null)}
+                onRemoveWallet={removeWallet}
+                onAddWallet={addWallet}
+                existingWalletSet={existingWalletSet}
+                selectedWalletLane={selectedWalletLane}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Connection Transactions Side Panel */}
+        {selectedConnection && (
+          <>
+            {/* Splitter */}
             <div
-              style={{ width: panelWidth }}
-              className="bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shrink-0"
+              onMouseDown={handleResizeStart}
+              className={`w-2 flex-shrink-0 cursor-col-resize group flex items-center justify-center hover:bg-indigo-500/20 transition-colors rounded ${
+                isResizing ? "bg-indigo-500/30" : ""
+              }`}
             >
-              {/* Panel Header */}
-              <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shrink-0">
-                    <span className="text-white font-semibold text-sm">
-                      {selectedWallet.slice(0, 2).toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <h3
-                      className="text-white font-semibold truncate copyable"
-                      data-copy={selectedWallet}
-                    >
-                      {formatAddress(selectedWallet)}
-                    </h3>
-                    <div className="flex items-center gap-3 text-xs mt-0.5">
-                      <span className="text-emerald-400 flex items-center gap-1">
-                        <ArrowDownLeft className="w-3 h-3" />$
-                        {selectedWalletData.totalInflow.toLocaleString()}
-                      </span>
-                      <span className="text-orange-400 flex items-center gap-1">
-                        <ArrowUpRight className="w-3 h-3" />$
-                        {selectedWalletData.totalOutflow.toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => removeWallet(selectedWallet)}
-                    className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
-                    title="Remove from graph"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-400" />
-                  </button>
-                  <button
-                    onClick={() => setSelectedWallet(null)}
-                    className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
-                    title="Close panel"
-                  >
-                    <X className="w-4 h-4 text-slate-400" />
-                  </button>
-                </div>
-              </div>
+              <div className="w-1 h-16 bg-slate-700 group-hover:bg-indigo-500 transition-colors rounded" />
+            </div>
 
-              {/* Tabs */}
-              <div className="flex border-b border-slate-800">
-                <button
-                  onClick={() => setActiveFlowTab("inflows")}
-                  className={`flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
-                    activeFlowTab === "inflows"
-                      ? "text-emerald-400 border-b-2 border-emerald-400 bg-emerald-400/5"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  <ArrowDownLeft className="w-4 h-4" />
-                  Inflows ({selectedWalletData.inflows.length})
-                </button>
-                <button
-                  onClick={() => setActiveFlowTab("outflows")}
-                  className={`flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
-                    activeFlowTab === "outflows"
-                      ? "text-orange-400 border-b-2 border-orange-400 bg-orange-400/5"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  <ArrowUpRight className="w-4 h-4" />
-                  Outflows ({selectedWalletData.outflows.length})
-                </button>
-              </div>
-
-              {/* Search */}
-              <div className="p-2 border-b border-slate-800">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input
-                    type="text"
-                    placeholder="Search address..."
-                    value={panelSearchQuery}
-                    onChange={(e) => setPanelSearchQuery(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              {/* Virtual Scroll Table */}
-              <div
-                ref={tableContainerRef}
-                className="flex-1 overflow-auto"
-                onScroll={(e) =>
-                  setScrollTop((e.target as HTMLDivElement).scrollTop)
-                }
-              >
-                {/* Header */}
-                <div className="sticky top-0 bg-slate-900 border-b border-slate-800 z-10">
-                  <div className="flex text-xs text-slate-400 uppercase">
-                    <button
-                      onClick={() => handleSort("address")}
-                      className="flex-1 p-2 font-medium flex items-center gap-1 hover:text-slate-200 transition-colors text-left"
-                    >
-                      Address <SortIcon column="address" />
-                    </button>
-                    <button
-                      onClick={() => handleSort("amount")}
-                      className="w-20 p-2 font-medium flex items-center justify-end gap-1 hover:text-slate-200 transition-colors"
-                    >
-                      Amount <SortIcon column="amount" />
-                    </button>
-                    <button
-                      onClick={() => handleSort("count")}
-                      className="w-12 p-2 font-medium flex items-center justify-end gap-1 hover:text-slate-200 transition-colors"
-                    >
-                      Tx <SortIcon column="count" />
-                    </button>
-                    <button
-                      onClick={() => handleSort("time")}
-                      className="w-20 p-2 font-medium flex items-center justify-end gap-1 hover:text-slate-200 transition-colors"
-                    >
-                      Last <SortIcon column="time" />
-                    </button>
-                    <div className="w-10 p-2"></div>
-                  </div>
-                </div>
-
-                {/* Virtual scroll container */}
-                <div
-                  style={{
-                    height: filteredCounterparties.length * ROW_HEIGHT,
-                    position: "relative",
-                  }}
-                >
-                  {filteredCounterparties.length === 0 ? (
-                    <div className="p-4 text-center text-slate-500 text-sm">
-                      No counterparties found
-                    </div>
-                  ) : (
-                    (() => {
-                      const containerHeight =
-                        tableContainerRef.current?.clientHeight || 400;
-                      const startIndex = Math.max(
-                        0,
-                        Math.floor(scrollTop / ROW_HEIGHT) - 2
-                      );
-                      const visibleCount =
-                        Math.ceil(containerHeight / ROW_HEIGHT) + 4;
-                      const endIndex = Math.min(
-                        filteredCounterparties.length,
-                        startIndex + visibleCount
-                      );
-
-                      return filteredCounterparties
-                        .slice(startIndex, endIndex)
-                        .map((cp, idx) => {
-                          const amount =
-                            activeFlowTab === "inflows"
-                              ? cp.inflow
-                              : cp.outflow;
-                          const isInGraph = existingWalletSet.has(cp.address);
-                          const actualIndex = startIndex + idx;
-
-                          return (
-                            <div
-                              key={cp.address}
-                              className="flex items-center hover:bg-slate-800/50 transition-colors border-b border-slate-800/50"
-                              style={{
-                                position: "absolute",
-                                top: actualIndex * ROW_HEIGHT,
-                                left: 0,
-                                right: 0,
-                                height: ROW_HEIGHT,
-                              }}
-                            >
-                              {/* Address */}
-                              <div className="flex-1 p-2 truncate">
-                                <span
-                                  className="text-sm text-slate-200 font-mono copyable"
-                                  data-copy={cp.address}
-                                >
-                                  {formatAddress(cp.address)}
-                                </span>
-                              </div>
-                              {/* Amount */}
-                              <div className="w-20 p-2 text-right">
-                                <span
-                                  className={`text-sm font-medium ${
-                                    activeFlowTab === "inflows"
-                                      ? "text-emerald-400"
-                                      : "text-orange-400"
-                                  }`}
-                                >
-                                  $
-                                  {amount >= 1000
-                                    ? `${(amount / 1000).toFixed(1)}K`
-                                    : amount.toLocaleString()}
-                                </span>
-                              </div>
-                              {/* Transaction count */}
-                              <div className="w-12 p-2 text-right">
-                                <span className="text-xs text-slate-400">
-                                  {cp.count}
-                                </span>
-                              </div>
-                              {/* Relative time */}
-                              <div className="w-20 p-2 text-right">
-                                <span className="text-xs text-slate-500">
-                                  {formatRelativeTime(cp.lastTx)}
-                                </span>
-                              </div>
-                              {/* Action */}
-                              <div className="w-10 p-2 text-center">
-                                {isInGraph ? (
-                                  <button
-                                    onClick={() => removeWallet(cp.address)}
-                                    className="p-1 rounded text-red-400 hover:bg-red-500/20 transition-colors"
-                                    title="Remove from graph"
-                                  >
-                                    <Minus className="w-4 h-4" />
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() =>
-                                      addWallet(
-                                        cp.address,
-                                        selectedWalletLane,
-                                        activeFlowTab === "inflows"
-                                      )
-                                    }
-                                    className="p-1 rounded text-indigo-400 hover:bg-indigo-500/20 transition-colors"
-                                    title="Add to graph"
-                                  >
-                                    <Plus className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        });
-                    })()
-                  )}
-                </div>
-              </div>
+            {/* Connection Panel */}
+            <div style={{ width: panelWidth }} className="shrink-0">
+              <ConnectionPanel
+                connection={selectedConnection}
+                onClose={() => setSelectedConnection(null)}
+              />
             </div>
           </>
         )}

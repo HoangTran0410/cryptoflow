@@ -1,18 +1,14 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Transaction } from "../types";
-import TransactionTable from "./TransactionTable";
 import {
   getAllWalletAddresses,
   getWalletStatistics,
   getWalletVolumeOverTime,
-  getWalletTransactionCount,
   getTaintAnalysis,
 } from "../utils/analytics";
 import {
   BarChart,
   Bar,
-  LineChart,
-  Line,
   AreaChart,
   Area,
   XAxis,
@@ -24,15 +20,18 @@ import {
 } from "recharts";
 import {
   Search,
-  TrendingUp,
   TrendingDown,
   Activity,
-  Calendar,
   Clock,
   Users,
   Droplet,
-  ChevronDown,
 } from "lucide-react";
+import loadable from "@loadable/component";
+import { LoadingFallback } from "../utils/loader";
+
+const TransactionTable = loadable(() => import("./TransactionTable"), {
+  fallback: LoadingFallback,
+});
 
 interface WalletAnalysisProps {
   transactions: Transaction[];

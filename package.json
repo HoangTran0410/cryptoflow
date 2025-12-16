@@ -19,6 +19,7 @@
     "recharts": "^3.5.1"
   },
   "devDependencies": {
+    "@types/d3": "^7.4.3",
     "@types/loadable__component": "^5.13.10",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",

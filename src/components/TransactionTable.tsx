@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Transaction } from "../types";
 import { ChevronDown, ChevronUp, Search, Wallet } from "lucide-react";
+import { formatAddress } from "../utils/helpers";
 
 interface TransactionTableProps {
   showHeader?: boolean;
@@ -273,7 +274,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                         className="px-2 py-1 rounded text-xs font-mono bg-slate-800 border border-slate-700 text-slate-300 copyable"
                         data-copy={tx.from}
                       >
-                        {tx.from}
+                        {formatAddress(tx.from)}
                       </span>
                     </div>
                     <div className="flex-[2] px-4 truncate" title={tx.to}>
@@ -281,7 +282,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                         className="px-2 py-1 rounded text-xs font-mono bg-slate-800 border border-slate-700 text-slate-300 copyable"
                         data-copy={tx.to}
                       >
-                        {tx.to}
+                        {formatAddress(tx.to)}
                       </span>
                     </div>
                     <div className="flex-1 px-4 text-right font-medium text-emerald-400">

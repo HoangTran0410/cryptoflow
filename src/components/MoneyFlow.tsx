@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useRef, useLayoutEffect } from "react";
-import { Transaction } from "../types";
-import { getWalletFlowStats } from "../utils/analytics";
+import { AddressFlowStats, Transaction } from "../types";
 import {
   ArrowUpRight,
   TrendingUp,
@@ -21,7 +20,75 @@ const CARD_HEIGHT = 80;
 
 type SubTab = "leaderboard" | "corridors";
 type SortDirection = "asc" | "desc";
-type LeaderboardColumn = "address" | "inflow" | "outflow" | "netFlow";
+type LeaderboardColumn =
+  | "address"
+  | "inflow"
+  | "outflow"
+  | "netFlow"
+  | "inflowCount"
+  | "outflowCount";
+
+// Get Top Wallet Flows
+export const getWalletFlowStats = (
+  transactions: Transaction[]
+): AddressFlowStats[] => {
+  const stats = new Map<string, AddressFlowStats>();
+
+  transactions.forEach((t) => {
+    if (!stats.has(t.from))
+      stats.set(t.from, {
+        address: t.from,
+        inflow: 0,
+        outflow: 0,
+        netFlow: 0,
+        txCount: 0,
+        inflowCount: 0,
+        outflowCount: 0,
+      });
+    if (!stats.has(t.to))
+      stats.set(t.to, {
+        address: t.to,
+        inflow: 0,
+        outflow: 0,
+        netFlow: 0,
+        txCount: 0,
+        inflowCount: 0,
+        outflowCount: 0,
+      });
+
+    const sender = stats.get(t.from)!;
+    const receiver = stats.get(t.to)!;
+
+    sender.outflow += t.amount;
+    sender.netFlow -= t.amount;
+    sender.txCount += 1;
+    sender.outflowCount += 1;
+
+    receiver.inflow += t.amount;
+    receiver.netFlow += t.amount;
+    receiver.txCount += 1;
+    receiver.inflowCount += 1;
+  });
+
+  return Array.from(stats.values()).sort(
+    (a, b) => b.inflow + b.outflow - (a.inflow + a.outflow)
+  );
+};
+
+const getVisibleRange = (
+  scrollTop: number,
+  totalItems: number,
+  itemHeight: number
+) => {
+  const totalHeight = totalItems * itemHeight;
+  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - 3);
+  const endIndex = Math.min(
+    totalItems,
+    Math.ceil((scrollTop + 800) / itemHeight) + 3
+  );
+  const visibleItems = startIndex * itemHeight;
+  return { startIndex, endIndex, offsetY: visibleItems, totalHeight };
+};
 
 const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
   const [activeTab, setActiveTab] = useState<SubTab>("leaderboard");
@@ -41,6 +108,8 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
     inflow: "",
     outflow: "",
     netFlow: "",
+    inflowCount: "",
+    outflowCount: "",
   });
 
   // --- State for Corridors ---
@@ -66,7 +135,9 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
       lbFilters.address ||
       lbFilters.inflow ||
       lbFilters.outflow ||
-      lbFilters.netFlow
+      lbFilters.netFlow ||
+      lbFilters.inflowCount ||
+      lbFilters.outflowCount
     ) {
       result = result.filter((item) => {
         const addrMatch = item.address
@@ -78,7 +149,20 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
           !lbFilters.outflow || item.outflow > Number(lbFilters.outflow);
         const netMatch =
           !lbFilters.netFlow || item.netFlow > Number(lbFilters.netFlow);
-        return addrMatch && inMatch && outMatch && netMatch;
+        const inCountMatch =
+          !lbFilters.inflowCount ||
+          item.inflowCount > Number(lbFilters.inflowCount);
+        const outCountMatch =
+          !lbFilters.outflowCount ||
+          item.outflowCount > Number(lbFilters.outflowCount);
+        return (
+          addrMatch &&
+          inMatch &&
+          outMatch &&
+          netMatch &&
+          inCountMatch &&
+          outCountMatch
+        );
       });
     }
 
@@ -130,21 +214,6 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
   }, [topPairs, corridorSearch]);
 
   // --- Virtualization Helpers ---
-  const getVisibleRange = (
-    scrollTop: number,
-    totalItems: number,
-    itemHeight: number
-  ) => {
-    const totalHeight = totalItems * itemHeight;
-    const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - 3);
-    const endIndex = Math.min(
-      totalItems,
-      Math.ceil((scrollTop + 800) / itemHeight) + 3
-    );
-    const visibleItems = startIndex * itemHeight;
-    return { startIndex, endIndex, offsetY: visibleItems, totalHeight };
-  };
-
   const lbVirt = getVisibleRange(
     leaderboardScroll,
     sortedAndFilteredStats.length,
@@ -249,14 +318,14 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
 
         {/* Enhanced Table Header with Sort & Search */}
         <div className="bg-slate-950 border-b border-slate-800 shrink-0 px-6 py-3">
-          <div className="grid grid-cols-12 gap-4">
+          <div className="flex gap-4">
             {/* Rank - No sort/filter */}
-            <div className="col-span-1 text-xs uppercase text-slate-500 font-semibold tracking-wider flex items-center h-8">
+            <div className="w-12 text-xs uppercase text-slate-500 font-semibold tracking-wider flex items-center h-8">
               #
             </div>
 
             {/* Address */}
-            <div className="col-span-5 space-y-2">
+            <div className="flex-[2] space-y-2">
               <div
                 className="flex items-center gap-1 cursor-pointer group select-none"
                 onClick={() => handleSort("address")}
@@ -284,7 +353,7 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
             </div>
 
             {/* Inflow */}
-            <div className="col-span-2 space-y-2 text-right">
+            <div className="w-28 space-y-2 text-right">
               <div
                 className="flex items-center justify-end gap-1 cursor-pointer group select-none"
                 onClick={() => handleSort("inflow")}
@@ -305,8 +374,33 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
               />
             </div>
 
+            {/* Inflow Count */}
+            <div className="w-20 space-y-2 text-right">
+              <div
+                className="flex items-center justify-end gap-1 cursor-pointer group select-none"
+                onClick={() => handleSort("inflowCount")}
+              >
+                <span className="text-xs uppercase text-slate-500 font-semibold tracking-wider group-hover:text-slate-300">
+                  In TXs
+                </span>
+                <SortIcon col="inflowCount" />
+              </div>
+              <input
+                type="text"
+                placeholder="Filter >..."
+                value={lbFilters.inflowCount}
+                onChange={(e) =>
+                  setLbFilters((prev) => ({
+                    ...prev,
+                    inflowCount: e.target.value,
+                  }))
+                }
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none placeholder:text-slate-700 text-right"
+              />
+            </div>
+
             {/* Outflow */}
-            <div className="col-span-2 space-y-2 text-right">
+            <div className="w-28 space-y-2 text-right">
               <div
                 className="flex items-center justify-end gap-1 cursor-pointer group select-none"
                 onClick={() => handleSort("outflow")}
@@ -327,8 +421,33 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
               />
             </div>
 
+            {/* Outflow Count */}
+            <div className="w-20 space-y-2 text-right">
+              <div
+                className="flex items-center justify-end gap-1 cursor-pointer group select-none"
+                onClick={() => handleSort("outflowCount")}
+              >
+                <span className="text-xs uppercase text-slate-500 font-semibold tracking-wider group-hover:text-slate-300">
+                  Out TXs
+                </span>
+                <SortIcon col="outflowCount" />
+              </div>
+              <input
+                type="text"
+                placeholder="Filter >..."
+                value={lbFilters.outflowCount}
+                onChange={(e) =>
+                  setLbFilters((prev) => ({
+                    ...prev,
+                    outflowCount: e.target.value,
+                  }))
+                }
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none placeholder:text-slate-700 text-right"
+              />
+            </div>
+
             {/* Net Flow */}
-            <div className="col-span-2 space-y-2 text-right">
+            <div className="w-32 space-y-2 text-right">
               <div
                 className="flex items-center justify-end gap-1 cursor-pointer group select-none"
                 onClick={() => handleSort("netFlow")}
@@ -368,44 +487,50 @@ const MoneyFlow: React.FC<MoneyFlowProps> = ({ transactions }) => {
                 return (
                   <div
                     key={s.address}
-                    className="grid grid-cols-12 gap-4 items-center hover:bg-slate-800/40 transition-colors border-b border-slate-800/30 h-[50px] text-sm px-6"
+                    className="flex gap-4 items-center hover:bg-slate-800/40 transition-colors border-b border-slate-800/30 h-[50px] text-sm px-6"
                   >
-                    <div className="col-span-1 text-slate-500 font-mono text-xs">
+                    <div className="w-12 text-slate-500 font-mono text-xs">
                       #{rank}
                     </div>
                     <div
-                      className="col-span-5 font-mono text-slate-300 truncate flex items-center gap-2"
+                      className="flex-[2] font-mono text-slate-300 truncate flex items-center gap-2"
                       title={s.address}
                     >
                       <span
-                        className={`w-2 h-2 rounded-full ${
+                        className={`w-2 h-2 rounded-full shrink-0 ${
                           s.netFlow > 0 ? "bg-emerald-500" : "bg-orange-500"
                         }`}
                       ></span>
-                      <span className="copyable" data-copy={s.address}>
+                      <span className="copyable truncate" data-copy={s.address}>
                         {s.address}
                       </span>
                       {(s.address.includes("_") ||
                         s.address.includes("Whale")) && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-900/50 text-indigo-300 border border-indigo-800/50">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-900/50 text-indigo-300 border border-indigo-800/50 shrink-0">
                           Entity
                         </span>
                       )}
                     </div>
-                    <div className="col-span-2 text-right text-emerald-500/90 font-mono">
+                    <div className="w-28 text-right text-emerald-500/90 font-mono">
                       +
                       {s.inflow.toLocaleString(undefined, {
                         maximumFractionDigits: 0,
                       })}
                     </div>
-                    <div className="col-span-2 text-right text-orange-500/90 font-mono">
+                    <div className="w-20 text-right text-slate-400 font-mono text-xs">
+                      {s.inflowCount.toLocaleString()}
+                    </div>
+                    <div className="w-28 text-right text-orange-500/90 font-mono">
                       -
                       {s.outflow.toLocaleString(undefined, {
                         maximumFractionDigits: 0,
                       })}
                     </div>
+                    <div className="w-20 text-right text-slate-400 font-mono text-xs">
+                      {s.outflowCount.toLocaleString()}
+                    </div>
                     <div
-                      className={`col-span-2 text-right font-bold font-mono ${
+                      className={`w-32 text-right font-bold font-mono ${
                         s.netFlow > 0
                           ? "text-emerald-400"
                           : s.netFlow < 0

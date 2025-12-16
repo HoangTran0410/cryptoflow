@@ -1,6 +1,7 @@
 import React, { useRef } from "react";
 import { TracerWallet } from "../../types";
 import { ArrowDownLeft, ArrowUpRight, GripVertical } from "lucide-react";
+import { formatAddress, formatAmount } from "@/src/utils/helpers";
 
 interface WalletCardProps {
   wallet: TracerWallet;
@@ -20,17 +21,6 @@ const WalletCard: React.FC<WalletCardProps> = ({
   onDragStart,
 }) => {
   const dragStarted = useRef(false);
-
-  const formatAddress = (addr: string) => {
-    if (addr.length <= 12) return addr;
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  };
-
-  const formatAmount = (amount: number) => {
-    if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
-    if (amount >= 1_000) return `$${(amount / 1_000).toFixed(1)}K`;
-    return `$${amount.toFixed(0)}`;
-  };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -52,7 +42,7 @@ const WalletCard: React.FC<WalletCardProps> = ({
       transform={`translate(${position.x - 90}, ${position.y - 35})`}
       className="wallet-card"
       style={{
-        opacity: isDragging ? 0.9 : 1,
+        // opacity: isDragging ? 0.9 : 1,
         cursor: isDragging ? "grabbing" : "grab",
       }}
       onMouseDown={handleMouseDown}
@@ -63,19 +53,14 @@ const WalletCard: React.FC<WalletCardProps> = ({
         width={180}
         height={70}
         rx={8}
-        fill={"rgba(30, 41, 59, 0.95)"}
+        fill={"rgba(30, 41, 59, 1)"}
         stroke={isSelected ? "#818cf8" : isDragging ? "#6366f1" : "#475569"}
         strokeWidth={isSelected || isDragging ? 2 : 1}
         className="wallet-card"
-        style={{
-          filter: isDragging
-            ? "drop-shadow(0 8px 20px rgba(0,0,0,0.5))"
-            : "drop-shadow(0 4px 12px rgba(0,0,0,0.4))",
-        }}
       />
 
       {/* Drag handle indicator */}
-      <g className="wallet-card">
+      {/* <g className="wallet-card">
         <rect
           x={2}
           y={25}
@@ -93,7 +78,7 @@ const WalletCard: React.FC<WalletCardProps> = ({
         >
           <GripVertical className="w-4 h-4 text-slate-500 hover:text-slate-300" />
         </foreignObject>
-      </g>
+      </g> */}
 
       {/* Wallet icon/avatar */}
       <circle cx={40} cy={35} r={14} fill="#6366f1" className="wallet-card" />
@@ -153,7 +138,7 @@ const WalletCard: React.FC<WalletCardProps> = ({
         </text>
 
         <foreignObject
-          x={65}
+          x={60}
           width={14}
           height={14}
           y={-2}
@@ -162,7 +147,7 @@ const WalletCard: React.FC<WalletCardProps> = ({
           <ArrowUpRight className="w-3 h-3 text-orange-400" />
         </foreignObject>
         <text
-          x={81}
+          x={75}
           y={9}
           fill="#fb923c"
           fontSize={9}

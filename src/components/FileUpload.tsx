@@ -1,12 +1,62 @@
 import React, { useCallback, useState } from "react";
 import { Upload, FileText, AlertCircle } from "lucide-react";
-import { parseCSV } from "../utils/analytics";
 import { Transaction } from "../types";
 import { SAMPLE_DATA } from "../constants";
 
 interface FileUploadProps {
   onDataLoaded: (data: Transaction[]) => void;
 }
+
+export const parseCSV = (csvText: string): Transaction[] => {
+  const lines = csvText.trim().split("\n");
+  if (lines.length < 2) return [];
+
+  const headers = lines[0]
+    .toLowerCase()
+    .split(",")
+    .map((h) => h.trim());
+
+  const getIndex = (keys: string[]) =>
+    headers.findIndex((h) => keys.some((k) => h.includes(k)));
+
+  const idxDate = getIndex(["date", "time", "timestamp"]);
+  const idxFrom = getIndex(["from", "sender", "source"]);
+  const idxTo = getIndex(["to", "receiver", "destination"]);
+  const idxAmount = getIndex(["amount", "value", "qty"]);
+  const idxCurrency = getIndex(["currency", "coin", "symbol", "asset"]);
+  const idxHash = getIndex(["hash", "id", "tx"]);
+
+  if (idxDate === -1 || idxAmount === -1) {
+    throw new Error("CSV must contain at least Date and Amount columns.");
+  }
+
+  return lines
+    .slice(1)
+    .map((line, index): Transaction | null => {
+      const cols = line.split(",").map((c) => c.trim());
+      if (cols.length < headers.length) return null;
+
+      const dateStr = cols[idxDate];
+      const amountStr = cols[idxAmount];
+
+      // Attempt parsing
+      const date = new Date(dateStr);
+      const amount = parseFloat(amountStr.replace(/[^0-9.-]/g, ""));
+
+      if (isNaN(date.getTime()) || isNaN(amount)) return null;
+
+      return {
+        id: idxHash !== -1 ? cols[idxHash] : `tx_${index}`,
+        date,
+        from: idxFrom !== -1 ? cols[idxFrom] : "Unknown",
+        to: idxTo !== -1 ? cols[idxTo] : "Unknown",
+        amount: Math.abs(amount),
+        currency: idxCurrency !== -1 ? cols[idxCurrency] : "UNK",
+        type: "transfer" as const,
+      };
+    })
+    .filter((t): t is Transaction => t !== null);
+};
 
 const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
   const [error, setError] = useState<string | null>(null);

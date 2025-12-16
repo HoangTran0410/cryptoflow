@@ -3,9 +3,6 @@ import { Transaction, SuspiciousPattern, AddressCluster } from "../types";
 import { useForensicsWorker } from "../hooks/useForensicsWorker";
 import { patternCache, generateCacheKey } from "../utils/cache";
 import { exportData } from "../utils/export";
-import LoadingSpinner from "./shared/LoadingSpinner";
-import SeverityBadge from "./shared/SeverityBadge";
-import ExportButton from "./shared/ExportButton";
 import {
   Shield,
   AlertTriangle,
@@ -14,7 +11,22 @@ import {
   RefreshCw,
   Activity,
 } from "lucide-react";
-import TransactionTable from "./TransactionTable";
+import { formatAddress } from "../utils/helpers";
+import loadable from "@loadable/component";
+import { LoadingFallback } from "../utils/loader";
+
+const TransactionTable = loadable(() => import("./TransactionTable"), {
+  fallback: LoadingFallback,
+});
+const LoadingSpinner = loadable(() => import("./shared/LoadingSpinner"), {
+  fallback: LoadingFallback,
+});
+const SeverityBadge = loadable(() => import("./shared/SeverityBadge"), {
+  fallback: LoadingFallback,
+});
+const ExportButton = loadable(() => import("./shared/ExportButton"), {
+  fallback: LoadingFallback,
+});
 
 interface ForensicsDashboardProps {
   transactions: Transaction[];
@@ -81,7 +93,9 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
     setLoadingProgress(90);
     setLoadingMessage("Finalizing analysis...");
 
+    // @ts-ignore
     setPatterns(cachedPatterns || []);
+    // @ts-ignore
     setClusters(cachedClusters || []);
 
     // Small delay to show 100%
@@ -357,9 +371,10 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
                   {selectedPattern.affectedAddresses.map((addr) => (
                     <span
                       key={addr}
-                      className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-xs font-mono border border-slate-700"
+                      data-copy={addr}
+                      className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-xs font-mono border border-slate-700 copyable"
                     >
-                      {addr}
+                      {formatAddress(addr)}
                     </span>
                   ))}
                 </div>
@@ -487,7 +502,7 @@ const ForensicsDashboard: React.FC<ForensicsDashboardProps> = ({
                       className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-xs font-mono border border-slate-700 copyable"
                       data-copy={addr}
                     >
-                      {addr}
+                      {formatAddress(addr)}
                     </span>
                   ))}
                 </div>

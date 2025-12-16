@@ -6,59 +6,7 @@ import {
   Node,
   Link,
   TraceData,
-  AddressFlowStats,
 } from "../types";
-
-export const parseCSV = (csvText: string): Transaction[] => {
-  const lines = csvText.trim().split("\n");
-  if (lines.length < 2) return [];
-
-  const headers = lines[0]
-    .toLowerCase()
-    .split(",")
-    .map((h) => h.trim());
-
-  const getIndex = (keys: string[]) =>
-    headers.findIndex((h) => keys.some((k) => h.includes(k)));
-
-  const idxDate = getIndex(["date", "time", "timestamp"]);
-  const idxFrom = getIndex(["from", "sender", "source"]);
-  const idxTo = getIndex(["to", "receiver", "destination"]);
-  const idxAmount = getIndex(["amount", "value", "qty"]);
-  const idxCurrency = getIndex(["currency", "coin", "symbol", "asset"]);
-  const idxHash = getIndex(["hash", "id", "tx"]);
-
-  if (idxDate === -1 || idxAmount === -1) {
-    throw new Error("CSV must contain at least Date and Amount columns.");
-  }
-
-  return lines
-    .slice(1)
-    .map((line, index): Transaction | null => {
-      const cols = line.split(",").map((c) => c.trim());
-      if (cols.length < headers.length) return null;
-
-      const dateStr = cols[idxDate];
-      const amountStr = cols[idxAmount];
-
-      // Attempt parsing
-      const date = new Date(dateStr);
-      const amount = parseFloat(amountStr.replace(/[^0-9.-]/g, ""));
-
-      if (isNaN(date.getTime()) || isNaN(amount)) return null;
-
-      return {
-        id: idxHash !== -1 ? cols[idxHash] : `tx_${index}`,
-        date,
-        from: idxFrom !== -1 ? cols[idxFrom] : "Unknown",
-        to: idxTo !== -1 ? cols[idxTo] : "Unknown",
-        amount: Math.abs(amount),
-        currency: idxCurrency !== -1 ? cols[idxCurrency] : "UNK",
-        type: "transfer" as const,
-      };
-    })
-    .filter((t): t is Transaction => t !== null);
-};
 
 export const calculateSummary = (
   transactions: Transaction[]
@@ -125,252 +73,6 @@ export const getDailyVolume = (transactions: Transaction[]): DailyVolume[] => {
     .sort((a, b) => a.date.localeCompare(b.date));
 };
 
-// Generate Force Directed Graph Data (All Nodes)
-export const generateGraphData = (
-  transactions: Transaction[],
-  limit = 300
-): GraphData => {
-  const nodesMap = new Map<string, Node>();
-  const linkMap = new Map<string, Link>();
-
-  // Activity calculation to limit nodes
-  const activity = new Map<string, number>();
-  transactions.forEach((t) => {
-    activity.set(t.from, (activity.get(t.from) || 0) + t.amount); // Weigh by volume, not just count
-    activity.set(t.to, (activity.get(t.to) || 0) + t.amount);
-  });
-
-  // Get Top N addresses by Volume (or all if limit is 0)
-  const topAddresses = new Set(
-    Array.from(activity.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, limit === 0 ? undefined : limit)
-      .map((e) => e[0])
-  );
-
-  transactions.forEach((t) => {
-    if (!topAddresses.has(t.from) || !topAddresses.has(t.to)) return;
-
-    if (!nodesMap.has(t.from))
-      nodesMap.set(t.from, {
-        id: t.from,
-        val: 0,
-        type: "source",
-        transactionCount: 0,
-      });
-    if (!nodesMap.has(t.to))
-      nodesMap.set(t.to, {
-        id: t.to,
-        val: 0,
-        type: "target",
-        transactionCount: 0,
-      });
-
-    const source = nodesMap.get(t.from)!;
-    const target = nodesMap.get(t.to)!;
-
-    source.val += t.amount;
-    target.val += t.amount;
-    source.transactionCount = (source.transactionCount || 0) + 1;
-    target.transactionCount = (target.transactionCount || 0) + 1;
-
-    const linkId = `${t.from}-${t.to}`;
-    if (linkMap.has(linkId)) {
-      const l = linkMap.get(linkId)!;
-      l.value += t.amount;
-      l.count = (l.count || 0) + 1;
-    } else {
-      linkMap.set(linkId, {
-        source: t.from,
-        target: t.to,
-        value: t.amount,
-        count: 1,
-      });
-    }
-  });
-
-  return {
-    nodes: Array.from(nodesMap.values()),
-    links: Array.from(linkMap.values()),
-  };
-};
-
-// Arkham-style Trace Data
-export const getTraceData = (
-  transactions: Transaction[],
-  centerAddress: string
-): TraceData => {
-  const inflows = new Map<string, { val: number; count: number }>();
-  const outflows = new Map<string, { val: number; count: number }>();
-
-  let totalIn = 0;
-  let totalOut = 0;
-  let centerCount = 0;
-
-  transactions.forEach((t) => {
-    if (t.to === centerAddress) {
-      const prev = inflows.get(t.from) || { val: 0, count: 0 };
-      inflows.set(t.from, { val: prev.val + t.amount, count: prev.count + 1 });
-      totalIn += t.amount;
-      centerCount++;
-    } else if (t.from === centerAddress) {
-      const prev = outflows.get(t.to) || { val: 0, count: 0 };
-      outflows.set(t.to, { val: prev.val + t.amount, count: prev.count + 1 });
-      totalOut += t.amount;
-      centerCount++;
-    }
-  });
-
-  const mainNode: Node = {
-    id: centerAddress,
-    val: totalIn + totalOut,
-    type: "main",
-    transactionCount: centerCount,
-  };
-
-  const topInflows = Array.from(inflows.entries())
-    .sort((a, b) => b[1].val - a[1].val)
-    .slice(0, 8)
-    .map(([id, data]) => ({
-      id,
-      val: data.val,
-      type: "source" as const,
-      transactionCount: data.count,
-    }));
-
-  const topOutflows = Array.from(outflows.entries())
-    .sort((a, b) => b[1].val - a[1].val)
-    .slice(0, 8)
-    .map(([id, data]) => ({
-      id,
-      val: data.val,
-      type: "target" as const,
-      transactionCount: data.count,
-    }));
-
-  const links: Link[] = [
-    ...topInflows.map((n) => ({
-      source: n.id,
-      target: centerAddress,
-      value: n.val,
-    })),
-    ...topOutflows.map((n) => ({
-      source: centerAddress,
-      target: n.id,
-      value: n.val,
-    })),
-  ];
-
-  return {
-    mainNode,
-    inflowNodes: topInflows,
-    outflowNodes: topOutflows,
-    links,
-  };
-};
-
-// Get Top Wallet Flows
-export const getWalletFlowStats = (
-  transactions: Transaction[]
-): AddressFlowStats[] => {
-  const stats = new Map<string, AddressFlowStats>();
-
-  transactions.forEach((t) => {
-    if (!stats.has(t.from))
-      stats.set(t.from, {
-        address: t.from,
-        inflow: 0,
-        outflow: 0,
-        netFlow: 0,
-        txCount: 0,
-      });
-    if (!stats.has(t.to))
-      stats.set(t.to, {
-        address: t.to,
-        inflow: 0,
-        outflow: 0,
-        netFlow: 0,
-        txCount: 0,
-      });
-
-    const sender = stats.get(t.from)!;
-    const receiver = stats.get(t.to)!;
-
-    sender.outflow += t.amount;
-    sender.netFlow -= t.amount;
-    sender.txCount += 1;
-
-    receiver.inflow += t.amount;
-    receiver.netFlow += t.amount;
-    receiver.txCount += 1;
-  });
-
-  return Array.from(stats.values()).sort(
-    (a, b) => b.inflow + b.outflow - (a.inflow + a.outflow)
-  );
-};
-
-// Interactive Explorer Helper: Get Neighbors
-export const getNeighbors = (
-  transactions: Transaction[],
-  nodeId: string
-): { nodes: Node[]; links: Link[] } => {
-  const neighbors = new Map<string, Node>();
-  const linkMap = new Map<string, Link>();
-
-  transactions.forEach((t) => {
-    if (t.from === nodeId || t.to === nodeId) {
-      const otherId = t.from === nodeId ? t.to : t.from;
-      const type = t.from === nodeId ? "target" : "source";
-
-      if (!neighbors.has(otherId)) {
-        neighbors.set(otherId, {
-          id: otherId,
-          val: 0,
-          type,
-          transactionCount: 0,
-        });
-      }
-
-      const n = neighbors.get(otherId)!;
-      n.val += t.amount;
-      n.transactionCount = (n.transactionCount || 0) + 1;
-
-      // Aggregate links
-      const linkId = `${t.from}-${t.to}`;
-      if (!linkMap.has(linkId)) {
-        linkMap.set(linkId, {
-          source: t.from,
-          target: t.to,
-          value: 0,
-          count: 0,
-        });
-      }
-      const l = linkMap.get(linkId)!;
-      l.value += t.amount;
-      l.count = (l.count || 0) + 1;
-    }
-  });
-
-  const links = Array.from(linkMap.values());
-
-  // Add self
-  // Sum values of all connected links
-  const selfVal = links.reduce((acc, l) => acc + l.value, 0);
-
-  const selfNode: Node = {
-    id: nodeId,
-    val: selfVal,
-    type: "main",
-    transactionCount: links.reduce((sum, l) => sum + (l.count || 0), 0),
-  };
-
-  return {
-    nodes: [selfNode, ...Array.from(neighbors.values())],
-    links,
-  };
-};
-
 // ===== FORENSICS FUNCTIONS =====
 
 import {
@@ -387,15 +89,288 @@ import {
   TimelineEvent,
 } from "../types";
 
-import {
-  calculatePathSuspicion,
-  detectCircularFlows,
-  calculateAvgDelay,
-  findCommonAmounts,
-  calculateFeatureSimilarity,
-  determineCommonBehavior,
-  mode,
-} from "./helpers";
+/**
+ * Calculate statistical mode (most frequent value) in an array
+ */
+export const mode = (arr: number[]): number => {
+  if (arr.length === 0) return 0;
+
+  const frequency = new Map<number, number>();
+  arr.forEach((val) => {
+    frequency.set(val, (frequency.get(val) || 0) + 1);
+  });
+
+  let maxFreq = 0;
+  let modeValue = arr[0];
+
+  frequency.forEach((freq, val) => {
+    if (freq > maxFreq) {
+      maxFreq = freq;
+      modeValue = val;
+    }
+  });
+
+  return modeValue;
+};
+
+/**
+ * Calculate cosine similarity between two feature vectors
+ * Used for address clustering
+ */
+export const calculateFeatureSimilarity = (
+  features1: any,
+  features2: any
+): number => {
+  // Extract comparable numeric features
+  const f1 = {
+    avgTxSize: features1.avgTransactionSize || 0,
+    peakHour: features1.peakActivityHour || 0,
+    roundRatio: features1.roundAmountRatio || 0,
+    txCount: features1.txCount || 0,
+  };
+
+  const f2 = {
+    avgTxSize: features2.avgTransactionSize || 0,
+    peakHour: features2.peakActivityHour || 0,
+    roundRatio: features2.roundAmountRatio || 0,
+    txCount: features2.txCount || 0,
+  };
+
+  // Normalize values to 0-1 range for fair comparison
+  const maxTxSize = Math.max(f1.avgTxSize, f2.avgTxSize) || 1;
+  const maxTxCount = Math.max(f1.txCount, f2.txCount) || 1;
+
+  const v1 = [
+    f1.avgTxSize / maxTxSize,
+    f1.peakHour / 24,
+    f1.roundRatio,
+    f1.txCount / maxTxCount,
+  ];
+
+  const v2 = [
+    f2.avgTxSize / maxTxSize,
+    f2.peakHour / 24,
+    f2.roundRatio,
+    f2.txCount / maxTxCount,
+  ];
+
+  // Calculate cosine similarity
+  let dotProduct = 0;
+  let norm1 = 0;
+  let norm2 = 0;
+
+  for (let i = 0; i < v1.length; i++) {
+    dotProduct += v1[i] * v2[i];
+    norm1 += v1[i] * v1[i];
+    norm2 += v2[i] * v2[i];
+  }
+
+  const denominator = Math.sqrt(norm1) * Math.sqrt(norm2);
+  return denominator === 0 ? 0 : dotProduct / denominator;
+};
+
+/**
+ * Detect circular flows (cycles) in transaction graph using DFS
+ * Returns array of detected cycles (each cycle is an array of addresses)
+ */
+export const detectCircularFlows = (
+  transactions: Transaction[]
+): string[][] => {
+  // Build adjacency list
+  const graph = new Map<string, string[]>();
+  transactions.forEach((tx) => {
+    if (!graph.has(tx.from)) graph.set(tx.from, []);
+    graph.get(tx.from)!.push(tx.to);
+  });
+
+  const cycles: string[][] = [];
+  const visited = new Set<string>();
+  const recursionStack = new Set<string>();
+  const currentPath: string[] = [];
+
+  const dfs = (node: string) => {
+    visited.add(node);
+    recursionStack.add(node);
+    currentPath.push(node);
+
+    const neighbors = graph.get(node) || [];
+    for (const neighbor of neighbors) {
+      if (!visited.has(neighbor)) {
+        dfs(neighbor);
+      } else if (recursionStack.has(neighbor)) {
+        // Found a cycle
+        const cycleStartIndex = currentPath.indexOf(neighbor);
+        if (cycleStartIndex !== -1) {
+          const cycle = currentPath.slice(cycleStartIndex);
+          // Only keep cycles of length 3+ to avoid trivial back-and-forth
+          if (cycle.length >= 3 && cycles.length < 10) {
+            // Limit to 10 cycles
+            cycles.push([...cycle, neighbor]); // Close the cycle
+          }
+        }
+      }
+    }
+
+    currentPath.pop();
+    recursionStack.delete(node);
+  };
+
+  // Run DFS from each unvisited node
+  graph.forEach((_, node) => {
+    if (!visited.has(node) && cycles.length < 10) {
+      dfs(node);
+    }
+  });
+
+  return cycles;
+};
+
+/**
+ * Calculate suspicion score for a transaction path
+ * Considers multiple factors: round amounts, rapid transfers, layering
+ */
+export const calculatePathSuspicion = (transactions: Transaction[]): number => {
+  if (transactions.length === 0) return 0;
+
+  let score = 0;
+  let factors = 0;
+
+  // Factor 1: Round amounts (0-30 points)
+  const roundAmounts = transactions.filter((tx) => {
+    const amount = tx.amount;
+    return amount >= 1000 && amount % 1000 === 0;
+  });
+  const roundRatio = roundAmounts.length / transactions.length;
+  score += roundRatio * 30;
+  factors++;
+
+  // Factor 2: Rapid transfers (0-30 points)
+  const sortedTxs = [...transactions].sort(
+    (a, b) => a.date.getTime() - b.date.getTime()
+  );
+  let rapidTransfers = 0;
+  for (let i = 1; i < sortedTxs.length; i++) {
+    const timeDiff =
+      sortedTxs[i].date.getTime() - sortedTxs[i - 1].date.getTime();
+    if (timeDiff < 5 * 60 * 1000) {
+      // < 5 minutes
+      rapidTransfers++;
+    }
+  }
+  if (sortedTxs.length > 1) {
+    score += (rapidTransfers / (sortedTxs.length - 1)) * 30;
+    factors++;
+  }
+
+  // Factor 3: Path length (0-20 points) - longer paths are more suspicious
+  const pathLengthScore = Math.min(transactions.length * 3, 20);
+  score += pathLengthScore;
+  factors++;
+
+  // Factor 4: Amount consistency (0-20 points) - very similar amounts are suspicious
+  if (transactions.length > 1) {
+    const amounts = transactions.map((tx) => tx.amount);
+    const avg = amounts.reduce((sum, a) => sum + a, 0) / amounts.length;
+    const variance =
+      amounts.reduce((sum, a) => sum + Math.pow(a - avg, 2), 0) /
+      amounts.length;
+    const stdDev = Math.sqrt(variance);
+    const coefficientOfVariation = avg > 0 ? stdDev / avg : 1;
+
+    // Low variation (< 0.1) is suspicious
+    if (coefficientOfVariation < 0.1) {
+      score += 20;
+    } else if (coefficientOfVariation < 0.3) {
+      score += 10;
+    }
+    factors++;
+  }
+
+  return Math.min(score, 100);
+};
+
+/**
+ * Calculate average delay between transactions for an address
+ * Returns average time in milliseconds
+ */
+export const calculateAvgDelay = (
+  transactions: Transaction[],
+  address: string
+): number => {
+  const relevantTxs = transactions
+    .filter((tx) => tx.from === address)
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  if (relevantTxs.length < 2) return 0;
+
+  const delays: number[] = [];
+  for (let i = 1; i < relevantTxs.length; i++) {
+    delays.push(
+      relevantTxs[i].date.getTime() - relevantTxs[i - 1].date.getTime()
+    );
+  }
+
+  return delays.reduce((sum, d) => sum + d, 0) / delays.length;
+};
+
+/**
+ * Find most common transaction amounts
+ * Returns map of amount → frequency
+ */
+export const findCommonAmounts = (
+  transactions: Transaction[]
+): Map<number, number> => {
+  const frequency = new Map<number, number>();
+
+  transactions.forEach((tx) => {
+    const roundedAmount = Math.round(tx.amount);
+    frequency.set(roundedAmount, (frequency.get(roundedAmount) || 0) + 1);
+  });
+
+  // Sort by frequency and return top 10
+  const sorted = Array.from(frequency.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+
+  return new Map(sorted);
+};
+
+/**
+ * Determine common behavior description for a cluster
+ * Based on cluster features
+ */
+export const determineCommonBehavior = (features: any): string => {
+  const behaviors: string[] = [];
+
+  // Check round amount behavior
+  if (features.roundAmountRatio > 0.5) {
+    behaviors.push("frequent round-amount transactions");
+  }
+
+  // Check activity timing
+  const hour = features.peakActivityHour;
+  if (hour >= 0 && hour < 6) {
+    behaviors.push("late-night activity");
+  } else if (hour >= 9 && hour < 17) {
+    behaviors.push("business-hours activity");
+  }
+
+  // Check transaction size
+  if (features.avgTransactionSize > 10000) {
+    behaviors.push("high-value transactions");
+  } else if (features.avgTransactionSize < 100) {
+    behaviors.push("micro-transactions");
+  }
+
+  // Check transaction frequency
+  if (features.txCount > 100) {
+    behaviors.push("high transaction volume");
+  }
+
+  return behaviors.length > 0
+    ? behaviors.join(", ")
+    : "standard transaction behavior";
+};
 
 /**
  * Recursively trace transactions up to N hops from a starting address.

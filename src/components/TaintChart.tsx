@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from "react";
-import * as d3 from "d3";
 import {
   sankey,
   sankeyLinkHorizontal,
@@ -12,6 +11,7 @@ import { useForensicsWorker } from "../hooks/useForensicsWorker";
 import LoadingSpinner from "./shared/LoadingSpinner";
 import ExportButton from "./shared/ExportButton";
 import { exportTaintToCSV } from "../utils/export";
+import { interpolateViridis, max, scaleSequential } from "d3";
 
 interface TaintChartProps {
   transactions: Transaction[];
@@ -78,7 +78,7 @@ const TaintChart: React.FC<TaintChartProps> = ({
     const width = 1200 - margin.left - margin.right;
     const height = 600 - margin.top - margin.bottom;
 
-    const svg = d3.select(svgRef.current);
+    const svg = select(svgRef.current);
     svg.selectAll("*").remove();
 
     const g = svg
@@ -236,9 +236,10 @@ const TaintChart: React.FC<TaintChartProps> = ({
     });
 
     // Color scale
-    const colorScale = d3
-      .scaleSequential(d3.interpolateViridis)
-      .domain([0, d3.max(validLinks, (d) => d.percentage) || 100]);
+    const colorScale = scaleSequential(interpolateViridis).domain([
+      0,
+      max(validLinks, (d) => d.percentage) || 100,
+    ]);
 
     // Draw links
     g.append("g")

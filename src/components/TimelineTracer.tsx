@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from "react";
-import * as d3 from "d3";
 import { Transaction, TimelineEvent } from "../types";
 import { getTransactionTimeline } from "../utils/analytics";
 import {
@@ -10,6 +9,15 @@ import {
   Activity,
   Moon,
 } from "lucide-react";
+import {
+  axisBottom,
+  axisLeft,
+  extent,
+  max,
+  scaleLinear,
+  scaleTime,
+  select,
+} from "d3";
 
 interface TimelineTracerProps {
   transactions: Transaction[];
@@ -48,7 +56,7 @@ const TimelineTracer: React.FC<TimelineTracerProps> = ({
     const width = 1200 - margin.left - margin.right;
     const height = 300 - margin.top - margin.bottom;
 
-    const svg = d3.select(svgRef.current);
+    const svg = select(svgRef.current);
     svg.selectAll("*").remove();
 
     const g = svg
@@ -56,27 +64,25 @@ const TimelineTracer: React.FC<TimelineTracerProps> = ({
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
     // Time scale
-    const xScale = d3
-      .scaleTime()
-      .domain(d3.extent(events, (d) => d.timestamp) as [Date, Date])
+    const xScale = scaleTime()
+      .domain(extent(events, (d) => d.timestamp) as [Date, Date])
       .range([0, width]);
 
     // Y scale for amount
-    const yScale = d3
-      .scaleLinear()
-      .domain([0, d3.max(events, (d) => d.amount) || 1])
+    const yScale = scaleLinear()
+      .domain([0, max(events, (d) => d.amount) || 1])
       .range([height, 0]);
 
     // Axes
     g.append("g")
       .attr("transform", `translate(0,${height})`)
-      .call(d3.axisBottom(xScale).ticks(8))
+      .call(axisBottom(xScale).ticks(8))
       .attr("color", "#64748b")
       .selectAll("text")
       .attr("fill", "#94a3b8");
 
     g.append("g")
-      .call(d3.axisLeft(yScale).ticks(5))
+      .call(axisLeft(yScale).ticks(5))
       .attr("color", "#64748b")
       .selectAll("text")
       .attr("fill", "#94a3b8");
@@ -136,8 +142,7 @@ const TimelineTracer: React.FC<TimelineTracerProps> = ({
       .attr("class", "grid")
       .attr("opacity", 0.1)
       .call(
-        d3
-          .axisLeft(yScale)
+        axisLeft(yScale)
           .ticks(5)
           .tickSize(-width)
           .tickFormat(() => "")

@@ -1,4 +1,4 @@
-import * as d3 from "d3";
+import type { SimulationNodeDatum, SimulationLinkDatum } from "d3";
 
 export interface Transaction {
   id: string;
@@ -10,7 +10,7 @@ export interface Transaction {
   type?: "transfer" | "mint" | "burn" | "fee";
 }
 
-export interface Node extends d3.SimulationNodeDatum {
+export interface Node extends SimulationNodeDatum {
   id: string;
   group?: number;
   val: number; // Volume
@@ -23,7 +23,7 @@ export interface Node extends d3.SimulationNodeDatum {
   fy?: number | null;
 }
 
-export interface Link extends d3.SimulationLinkDatum<Node> {
+export interface Link extends SimulationLinkDatum<Node> {
   source: string | Node;
   target: string | Node;
   value: number; // Amount
@@ -58,6 +58,8 @@ export interface AddressFlowStats {
   outflow: number;
   netFlow: number;
   txCount: number;
+  inflowCount: number;
+  outflowCount: number;
 }
 
 export interface TraceData {
@@ -302,4 +304,12 @@ export interface TracerConnection {
   totalAmount: number;
   txCount: number;
   transactions: Transaction[];
+}
+
+export interface CombinedConnection {
+  addressA: string;
+  addressB: string;
+  aToB: TracerConnection | null;
+  bToA: TracerConnection | null;
+  totalAmount: number;
 }

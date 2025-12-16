@@ -5,9 +5,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import * as d3 from "d3";
-import { Transaction, Node, Link } from "../types";
-import { generateGraphData } from "../utils/analytics";
+import { Transaction, Node, Link, GraphData } from "../types";
 import {
   Search,
   Filter,
@@ -21,11 +19,91 @@ import {
   Network,
 } from "lucide-react";
 import TransactionTable from "./TransactionTable";
+import {
+  forceCenter,
+  forceCollide,
+  forceLink,
+  forceManyBody,
+  forceSimulation,
+  select,
+  zoom,
+  zoomIdentity,
+} from "d3";
 
 interface UnifiedGraphProps {
   transactions: Transaction[];
   initialAddress: string;
 }
+
+// Generate Force Directed Graph Data (All Nodes)
+export const generateGraphData = (
+  transactions: Transaction[],
+  limit = 300
+): GraphData => {
+  const nodesMap = new Map<string, Node>();
+  const linkMap = new Map<string, Link>();
+
+  // Activity calculation to limit nodes
+  const activity = new Map<string, number>();
+  transactions.forEach((t) => {
+    activity.set(t.from, (activity.get(t.from) || 0) + t.amount); // Weigh by volume, not just count
+    activity.set(t.to, (activity.get(t.to) || 0) + t.amount);
+  });
+
+  // Get Top N addresses by Volume (or all if limit is 0)
+  const topAddresses = new Set(
+    Array.from(activity.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit === 0 ? undefined : limit)
+      .map((e) => e[0])
+  );
+
+  transactions.forEach((t) => {
+    if (!topAddresses.has(t.from) || !topAddresses.has(t.to)) return;
+
+    if (!nodesMap.has(t.from))
+      nodesMap.set(t.from, {
+        id: t.from,
+        val: 0,
+        type: "source",
+        transactionCount: 0,
+      });
+    if (!nodesMap.has(t.to))
+      nodesMap.set(t.to, {
+        id: t.to,
+        val: 0,
+        type: "target",
+        transactionCount: 0,
+      });
+
+    const source = nodesMap.get(t.from)!;
+    const target = nodesMap.get(t.to)!;
+
+    source.val += t.amount;
+    target.val += t.amount;
+    source.transactionCount = (source.transactionCount || 0) + 1;
+    target.transactionCount = (target.transactionCount || 0) + 1;
+
+    const linkId = `${t.from}-${t.to}`;
+    if (linkMap.has(linkId)) {
+      const l = linkMap.get(linkId)!;
+      l.value += t.amount;
+      l.count = (l.count || 0) + 1;
+    } else {
+      linkMap.set(linkId, {
+        source: t.from,
+        target: t.to,
+        value: t.amount,
+        count: 1,
+      });
+    }
+  });
+
+  return {
+    nodes: Array.from(nodesMap.values()),
+    links: Array.from(linkMap.values()),
+  };
+};
 
 const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
   transactions,
@@ -201,12 +279,12 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
         if (found && found.x && found.y && svgRef.current && zoomRef.current) {
           const width = containerRef.current?.clientWidth || 800;
           const height = containerRef.current?.clientHeight || 800;
-          d3.select(svgRef.current)
+          select(svgRef.current)
             .transition()
             .duration(750)
             .call(
               zoomRef.current.transform,
-              d3.zoomIdentity
+              zoomIdentity
                 .translate(width / 2, height / 2)
                 .scale(1.5)
                 .translate(-found.x, -found.y)
@@ -280,12 +358,12 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
 
     const translate = [width / 2 - scale * x, height / 2 - scale * y];
 
-    d3.select(svgRef.current)
+    select(svgRef.current)
       .transition()
       .duration(750)
       .call(
         zoomRef.current.transform,
-        d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+        zoomIdentity.translate(translate[0], translate[1]).scale(scale)
       );
   }, [nodes, selectedNodeId, connectedNodeIds]);
 
@@ -356,8 +434,7 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
 
-    const svg = d3
-      .select(svgRef.current)
+    const svg = select(svgRef.current)
       .attr("viewBox", [0, 0, width, height])
       .on("click", handleBgClick);
 
@@ -386,8 +463,7 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
     }
 
     if (!zoomRef.current) {
-      zoomRef.current = d3
-        .zoom<SVGSVGElement, unknown>()
+      zoomRef.current = zoom<SVGSVGElement, unknown>()
         .scaleExtent([0.01, 8])
         .on("zoom", (event) => g.attr("transform", event.transform));
       svg.call(zoomRef.current);
@@ -488,21 +564,18 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
     // --- Simulation & Layout ---
     if (simulationRef.current) simulationRef.current.stop();
 
-    const simulation = d3
-      .forceSimulation(displayNodes)
+    const simulation = forceSimulation(displayNodes)
       .force(
         "link",
-        d3
-          .forceLink(displayLinks)
+        forceLink(displayLinks)
           .id((d: any) => d.id)
           .distance(50)
       ) // Added distance constraint
-      .force("charge", d3.forceManyBody().strength(-30)) // Significantly reduced repulsion (was -200)
-      .force("center", d3.forceCenter(width / 2, height / 2).strength(0.8)) // Stronger centering (was 0.05)
+      .force("charge", forceManyBody().strength(-30)) // Significantly reduced repulsion (was -200)
+      .force("center", forceCenter(width / 2, height / 2).strength(0.8)) // Stronger centering (was 0.05)
       .force(
         "collide",
-        d3
-          .forceCollide()
+        forceCollide()
           .radius((d: any) => Math.sqrt(d.val || 1) + 5)
           .iterations(2)
       );
@@ -540,7 +613,7 @@ const UnifiedGraph: React.FC<UnifiedGraphProps> = ({
   // --- D3 Effect 2: Visual Styling (Selection/Highlighting) ---
   useEffect(() => {
     if (!svgRef.current) return;
-    const svg = d3.select(svgRef.current);
+    const svg = select(svgRef.current);
     const nodesG = svg.selectAll<SVGGElement, Node>(".graph-node");
     const linksG = svg.selectAll<SVGLineElement, Link>(".graph-link");
 
