@@ -15,11 +15,15 @@ import {
   Pause,
   Play,
   Square,
+  Eye,
+  EyeOff,
+  Calendar,
 } from "lucide-react";
 import { Transaction } from "../types";
 import {
   CHAINS,
   parseAddressInput,
+  parseApiKeys,
   scanBulkAddresses,
   scanMultipleLayers,
   ScanProgress,
@@ -37,6 +41,7 @@ import {
   clearCacheForAddress,
   CacheStats,
 } from "../utils/walletCache";
+import { formatAddress } from "../utils/helpers";
 
 interface WalletScannerProps {
   onDataLoaded: (data: Transaction[]) => void;
@@ -84,6 +89,11 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
   const [useCache, setUseCache] = useState(true);
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [clearAddressInput, setClearAddressInput] = useState("");
+  const [showApiKeys, setShowApiKeys] = useState(false);
+
+  // Date range filter
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   const addresses = parseAddressInput(addressInput);
 
@@ -145,6 +155,8 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
           useCache,
           controller,
           maxLayers,
+          fromDate: fromDate || undefined,
+          toDate: toDate || undefined,
           onProgress,
           onLayerComplete: (layer, addrs) => {
             console.log(`Layer ${layer} complete:`, addrs.length, "addresses");
@@ -157,6 +169,8 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
           useCache,
           controller,
           onProgress,
+          fromDate: fromDate || undefined,
+          toDate: toDate || undefined,
         });
       }
 
@@ -226,29 +240,58 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
         </p>
       </div>
 
-      {/* API Key Section - Moralis */}
+      {/* API Keys Section - Moralis (supports multiple) */}
       <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-        <label className="block text-sm font-medium text-slate-300 mb-2">
-          Moralis API Key
-          <a
-            href="https://admin.moralis.com/web3apis"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-2 text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1"
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-sm font-medium text-slate-300">
+            Moralis API Keys
+            <span className="text-slate-500 font-normal ml-2">
+              ({parseApiKeys(apiKey).length} keys)
+            </span>
+            <a
+              href="https://admin.moralis.com/web3apis"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-2 text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1"
+            >
+              Get free key <ExternalLink className="w-3 h-3" />
+            </a>
+          </label>
+          <button
+            onClick={() => setShowApiKeys(!showApiKeys)}
+            className="text-slate-400 hover:text-white transition-colors"
+            title={showApiKeys ? "Hide API keys" : "Show API keys"}
           >
-            Get free key <ExternalLink className="w-3 h-3" />
-          </a>
-        </label>
-        <input
-          type="password"
-          value={apiKey}
+            {showApiKeys ? (
+              <Eye className="w-5 h-5" />
+            ) : (
+              <EyeOff className="w-5 h-5" />
+            )}
+          </button>
+        </div>
+        <textarea
+          value={
+            showApiKeys
+              ? apiKey
+              : apiKey
+                  .split("\n")
+                  .filter((k) => k)
+                  .map((k) => "************************")
+                  .join("\n")
+          }
+          disabled={apiKey && !showApiKeys}
           onChange={(e) => setApiKey(e.target.value)}
-          placeholder="Enter your Moralis API key"
-          className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+          placeholder={
+            showApiKeys
+              ? "Enter Moralis API keys (one per line)\neyJhbGcixxx...\neyJhbGcixxy..."
+              : "API keys are hidden"
+          }
+          rows={3}
+          className={`w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-mono text-sm resize-y`}
         />
         <p className="text-xs text-slate-500 mt-2">
-          🔑 Free tier: 40K requests/month. Sign up at moralis.com for free API
-          key.
+          🔑 Enter multiple keys (one per line) - auto-rotates on rate limit.
+          Free tier: 40K requests/month per key.
         </p>
       </div>
 
@@ -311,6 +354,43 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Date Range Filter */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+        <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
+          <Calendar className="w-4 h-4" />
+          Date & Time Range (Optional)
+        </label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">
+              From Date & Time
+            </label>
+            <input
+              type="datetime-local"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              step="1"
+              className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-indigo-500 outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">
+              To Date & Time
+            </label>
+            <input
+              type="datetime-local"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              step="1"
+              className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-indigo-500 outline-none"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mt-2">
+          📅 Leave empty to fetch most recent transactions.
+        </p>
       </div>
 
       {/* Address Input */}
@@ -738,8 +818,9 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
                     {cacheStats.entries.slice(0, 20).map((entry, idx) => (
                       <tr key={idx} className="border-b border-slate-800">
                         <td className="py-2 pr-4 font-mono text-slate-300">
-                          {entry.address.slice(0, 10)}...
-                          {entry.address.slice(-6)}
+                          <span className="copyable">
+                            {formatAddress(entry.address)}
+                          </span>
                         </td>
                         <td className="py-2 pr-4 text-slate-400">
                           {entry.chain.toUpperCase()}

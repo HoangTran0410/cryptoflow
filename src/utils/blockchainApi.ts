@@ -231,6 +231,23 @@ interface MoralisTransfer {
   address: string; // token contract address
 }
 
+// Track failed API keys to avoid reusing them in the same session
+const failedApiKeys = new Set<string>();
+
+/**
+ * Parse API keys input (comma, newline, or semicolon separated)
+ */
+export function parseApiKeys(input: string): string[] {
+  return input
+    .split(/[\n,;]/)
+    .map((key) => key.trim())
+    .filter((key) => key.length > 0);
+}
+
+/**
+ * Fetch token transfers using Moralis API
+ * Requires API key from https://moralis.com
+ */
 /**
  * Fetch token transfers using Moralis API
  * Requires API key from https://moralis.com
@@ -239,7 +256,9 @@ async function fetchFromMoralis(
   address: string,
   apiKey: string,
   chain: keyof typeof CHAINS,
-  contractAddress?: string
+  contractAddress?: string,
+  fromDate?: string, // YYYY-MM-DD
+  toDate?: string // YYYY-MM-DD
 ): Promise<TokenTransfer[]> {
   const moralisChain = MORALIS_CHAINS[chain];
   if (!moralisChain) throw new Error(`Chain ${chain} not supported by Moralis`);
@@ -255,6 +274,17 @@ async function fetchFromMoralis(
     params.set("contract_addresses", contractAddress);
   }
 
+  // Filter by date range
+  // Convert local datetime string (e.g., 2023-12-25T14:30) to ISO UTC string for API
+  if (fromDate) {
+    const isoFrom = new Date(fromDate).toISOString();
+    params.set("from_date", isoFrom);
+  }
+  if (toDate) {
+    const isoTo = new Date(toDate).toISOString();
+    params.set("to_date", isoTo);
+  }
+
   const url = `${MORALIS_API_BASE}/${address}/erc20/transfers?${params}`;
 
   const response = await fetch(url, {
@@ -266,6 +296,15 @@ async function fetchFromMoralis(
 
   if (!response.ok) {
     const errorText = await response.text();
+    // Mark this key as failed if rate limited or unauthorized
+    if (response.status === 429 || response.status === 401) {
+      failedApiKeys.add(apiKey);
+      console.warn(
+        `API key ${apiKey.slice(0, 8)}... marked as failed (status ${
+          response.status
+        })`
+      );
+    }
     throw new Error(`Moralis API error: ${response.status} - ${errorText}`);
   }
 
@@ -289,23 +328,67 @@ async function fetchFromMoralis(
 
 /**
  * Fetch all token transfers for an address using Moralis API
+ * Supports multiple API keys - rotates on error/rate limit
  */
 export async function fetchTokenTransfers(
   address: string,
-  apiKey: string,
+  apiKeysInput: string,
   chain: keyof typeof CHAINS = "bsc",
-  contractAddress?: string
+  contractAddress?: string,
+  fromDate?: string,
+  toDate?: string
 ): Promise<TokenTransfer[]> {
   const config = CHAINS[chain];
   if (!config) throw new Error(`Unknown chain: ${chain}`);
 
-  if (!apiKey) {
+  // Parse multiple API keys
+  const allKeys = parseApiKeys(apiKeysInput);
+  if (allKeys.length === 0) {
     throw new Error(
       "Moralis API key required. Get a free key at: https://moralis.com"
     );
   }
 
-  return await fetchFromMoralis(address, apiKey, chain, contractAddress);
+  // Filter out previously failed keys
+  const availableKeys = allKeys.filter((key) => !failedApiKeys.has(key));
+
+  // If all keys failed, reset and try again
+  const keysToTry = availableKeys.length > 0 ? availableKeys : allKeys;
+  if (availableKeys.length === 0) {
+    console.log("All keys previously failed, resetting failed keys list...");
+    failedApiKeys.clear();
+  }
+
+  // Try each key until one works
+  let lastError: Error | null = null;
+  for (const apiKey of keysToTry) {
+    try {
+      console.log(
+        `Trying API key ${apiKey.slice(0, 8)}... (${
+          keysToTry.indexOf(apiKey) + 1
+        }/${keysToTry.length})`
+      );
+      return await fetchFromMoralis(
+        address,
+        apiKey,
+        chain,
+        contractAddress,
+        fromDate,
+        toDate
+      );
+    } catch (err) {
+      lastError = err as Error;
+      console.warn(
+        `API key ${apiKey.slice(0, 8)}... failed:`,
+        (err as Error).message
+      );
+      // Continue to next key
+    }
+  }
+
+  throw new Error(
+    `All ${keysToTry.length} API keys failed. Last error: ${lastError?.message}`
+  );
 }
 
 /**
@@ -314,10 +397,19 @@ export async function fetchTokenTransfers(
 export async function fetchUSDTTransfers(
   address: string,
   apiKey: string,
-  chain: keyof typeof CHAINS = "bsc"
+  chain: keyof typeof CHAINS = "bsc",
+  fromDate?: string,
+  toDate?: string
 ): Promise<TokenTransfer[]> {
   const config = CHAINS[chain];
-  return fetchTokenTransfers(address, apiKey, chain, config.usdtContract);
+  return fetchTokenTransfers(
+    address,
+    apiKey,
+    chain,
+    config.usdtContract,
+    fromDate,
+    toDate
+  );
 }
 
 /**
@@ -349,13 +441,15 @@ export async function scanAddress(
   apiKey: string,
   chain: keyof typeof CHAINS = "bsc",
   usdtOnly = true,
-  useCache = true
+  useCache = true,
+  fromDate?: string,
+  toDate?: string
 ): Promise<Transaction[]> {
   const config = CHAINS[chain];
   const tokenContract = usdtOnly ? config.usdtContract || null : null;
 
-  // Check cache first
-  if (useCache) {
+  // Check cache first (skip cache if date filters are applied)
+  if (useCache && !fromDate && !toDate) {
     const cached = await getCachedTransactions(address, chain, tokenContract);
     if (cached) {
       // Convert cached raw transfers to Transaction objects
@@ -366,12 +460,18 @@ export async function scanAddress(
   // Cache miss - fetch from API with rate limiting
   return rateLimiter.schedule(async () => {
     const transfers = usdtOnly
-      ? await fetchUSDTTransfers(address, apiKey, chain)
-      : await fetchTokenTransfers(address, apiKey, chain);
+      ? await fetchUSDTTransfers(address, apiKey, chain, fromDate, toDate)
+      : await fetchTokenTransfers(
+          address,
+          apiKey,
+          chain,
+          undefined,
+          fromDate,
+          toDate
+        );
 
-    // Save to cache
-
-    if (useCache && transfers.length >= 0) {
+    // Save to cache only if strictly no date filter (full history)
+    if (useCache && transfers.length >= 0 && !fromDate && !toDate) {
       await setCachedTransactions(address, chain, tokenContract, transfers);
     }
 
@@ -379,6 +479,9 @@ export async function scanAddress(
   });
 }
 
+/**
+ * Scan multiple addresses with progress callback and pause/stop support
+ */
 /**
  * Scan multiple addresses with progress callback and pause/stop support
  */
@@ -392,6 +495,8 @@ export async function scanBulkAddresses(
     controller?: ScanController;
     onProgress?: (progress: ScanProgress) => void;
     startLayer?: number;
+    fromDate?: string;
+    toDate?: string;
   } = {}
 ): Promise<BulkScanResult> {
   const {
@@ -401,9 +506,13 @@ export async function scanBulkAddresses(
     controller,
     onProgress,
     startLayer = 1,
+    fromDate,
+    toDate,
   } = options;
 
-  const normalizedAddresses = addresses.map((a) => a.toLowerCase().trim());
+  const normalizedAddresses = [
+    ...new Set(addresses.map((a) => a.toLowerCase().trim())),
+  ];
   const allTransactions: Transaction[] = [];
   const layerMap = new Map<number, string[]>();
   const addressToLayer = new Map<string, number>();
@@ -453,7 +562,9 @@ export async function scanBulkAddresses(
         apiKey,
         chain,
         usdtOnly,
-        useCache
+        useCache,
+        fromDate,
+        toDate
       );
       allTransactions.push(...transactions);
       successCount++;
@@ -496,6 +607,8 @@ export async function scanMultipleLayers(
     maxLayers?: number;
     onProgress?: (progress: ScanProgress) => void;
     onLayerComplete?: (layer: number, addresses: string[]) => void;
+    fromDate?: string;
+    toDate?: string;
   } = {}
 ): Promise<BulkScanResult> {
   const {
@@ -506,6 +619,8 @@ export async function scanMultipleLayers(
     maxLayers = 3,
     onProgress,
     onLayerComplete,
+    fromDate,
+    toDate,
   } = options;
 
   const allTransactions: Transaction[] = [];
@@ -580,7 +695,9 @@ export async function scanMultipleLayers(
           apiKey,
           chain,
           usdtOnly,
-          useCache
+          useCache,
+          fromDate,
+          toDate
         );
         allTransactions.push(...transactions);
         successCount++;
