@@ -62,7 +62,7 @@ export const parseCSV = (csvText: string): Transaction[] => {
 };
 
 const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
-  const [mode, setMode] = useState<InputMode>("scan");
+  const [mode, setMode] = useState<InputMode>("upload");
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -99,17 +99,6 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
       <div className="flex justify-center mb-8">
         <div className="inline-flex rounded-xl bg-slate-800/50 p-1 border border-slate-700">
           <button
-            onClick={() => setMode("scan")}
-            className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all ${
-              mode === "scan"
-                ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            <Search className="w-4 h-4" />
-            Scan Wallets
-          </button>
-          <button
             onClick={() => setMode("upload")}
             className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all ${
               mode === "upload"
@@ -119,6 +108,17 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
           >
             <Upload className="w-4 h-4" />
             Upload CSV
+          </button>
+          <button
+            onClick={() => setMode("scan")}
+            className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all ${
+              mode === "scan"
+                ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <Search className="w-4 h-4" />
+            Scan Wallets
           </button>
         </div>
       </div>
