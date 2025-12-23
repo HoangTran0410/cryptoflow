@@ -95,6 +95,10 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
+  // Pagination limits
+  const [maxPages, setMaxPages] = useState(10);
+  const [maxTransactions, setMaxTransactions] = useState(1000);
+
   const addresses = parseAddressInput(addressInput);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,6 +161,8 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
           maxLayers,
           fromDate: fromDate || undefined,
           toDate: toDate || undefined,
+          maxPages: maxPages || undefined,
+          maxTransactions: maxTransactions || undefined,
           onProgress,
           onLayerComplete: (layer, addrs) => {
             console.log(`Layer ${layer} complete:`, addrs.length, "addresses");
@@ -171,6 +177,8 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
           onProgress,
           fromDate: fromDate || undefined,
           toDate: toDate || undefined,
+          maxPages: maxPages || undefined,
+          maxTransactions: maxTransactions || undefined,
         });
       }
 
@@ -194,7 +202,19 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
       setIsPaused(false);
       controllerRef.current = null;
     }
-  }, [apiKey, addresses, chain, scanMode, maxLayers, useCache, onDataLoaded]);
+  }, [
+    apiKey,
+    addresses,
+    chain,
+    scanMode,
+    maxLayers,
+    useCache,
+    fromDate,
+    toDate,
+    maxPages,
+    maxTransactions,
+    onDataLoaded,
+  ]);
 
   const handlePause = useCallback(() => {
     if (controllerRef.current && !controllerRef.current.isPaused) {
@@ -388,8 +408,43 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
             />
           </div>
         </div>
+
+        {/* Pagination Limits */}
+        <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-700">
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">
+              Max Pages per Wallet
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={maxPages}
+              onChange={(e) => setMaxPages(parseInt(e.target.value) || 10)}
+              className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-indigo-500 outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">
+              Max Transactions per Wallet
+            </label>
+            <input
+              type="number"
+              min={100}
+              max={10000}
+              step={100}
+              value={maxTransactions}
+              onChange={(e) =>
+                setMaxTransactions(parseInt(e.target.value) || 1000)
+              }
+              className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-indigo-500 outline-none"
+            />
+          </div>
+        </div>
+
         <p className="text-xs text-slate-500 mt-2">
-          📅 Leave empty to fetch most recent transactions.
+          📅 Date range: leave empty to fetch most recent. 📊 Limits: each page
+          = 100 tx max.
         </p>
       </div>
 

@@ -245,85 +245,156 @@ export function parseApiKeys(input: string): string[] {
 }
 
 /**
- * Fetch token transfers using Moralis API
- * Requires API key from https://moralis.com
+ * Pagination options for fetching transactions
  */
+export interface PaginationOptions {
+  maxPages?: number; // Maximum number of API pages to fetch (default: 10)
+  maxTransactions?: number; // Maximum transactions to fetch (default: 1000)
+}
+
+// Default pagination limits
+const DEFAULT_MAX_PAGES = 10;
+const DEFAULT_MAX_TRANSACTIONS = 1000;
+
 /**
- * Fetch token transfers using Moralis API
+ * Fetch token transfers using Moralis API with pagination support
  * Requires API key from https://moralis.com
+ *
+ * Moralis returns max 100 transfers per page. This function handles pagination
+ * automatically using the cursor mechanism.
  */
 async function fetchFromMoralis(
   address: string,
   apiKey: string,
   chain: keyof typeof CHAINS,
   contractAddress?: string,
-  fromDate?: string, // YYYY-MM-DD
-  toDate?: string // YYYY-MM-DD
+  fromDate?: string, // YYYY-MM-DDTHH:mm format (local time)
+  toDate?: string, // YYYY-MM-DDTHH:mm format (local time)
+  paginationOptions?: PaginationOptions
 ): Promise<TokenTransfer[]> {
   const moralisChain = MORALIS_CHAINS[chain];
   if (!moralisChain) throw new Error(`Chain ${chain} not supported by Moralis`);
 
-  // Build URL with query params
-  const params = new URLSearchParams({
-    chain: moralisChain,
-    order: "ASC",
-  });
+  const maxPages = paginationOptions?.maxPages ?? DEFAULT_MAX_PAGES;
+  const maxTransactions =
+    paginationOptions?.maxTransactions ?? DEFAULT_MAX_TRANSACTIONS;
 
-  // Filter by specific token if provided
-  if (contractAddress) {
-    params.set("contract_addresses", contractAddress);
-  }
+  const allTransfers: TokenTransfer[] = [];
+  let cursor: string | null = null;
+  let pageCount = 0;
 
-  // Filter by date range
-  // Convert local datetime string (e.g., 2023-12-25T14:30) to ISO UTC string for API
-  if (fromDate) {
-    const isoFrom = new Date(fromDate).toISOString();
-    params.set("from_date", isoFrom);
-  }
-  if (toDate) {
-    const isoTo = new Date(toDate).toISOString();
-    params.set("to_date", isoTo);
-  }
+  do {
+    // Build URL with query params
+    const params = new URLSearchParams({
+      chain: moralisChain,
+      order: "ASC",
+      limit: "100", // Max per request
+    });
 
-  const url = `${MORALIS_API_BASE}/${address}/erc20/transfers?${params}`;
+    // Filter by specific token if provided
+    if (contractAddress) {
+      params.set("contract_addresses", contractAddress);
+    }
 
-  const response = await fetch(url, {
-    headers: {
-      "X-API-Key": apiKey,
-      Accept: "application/json",
-    },
-  });
+    // Filter by date range
+    // Convert local datetime string (e.g., 2023-12-25T14:30) to ISO UTC string for API
+    if (fromDate) {
+      const isoFrom = new Date(fromDate).toISOString();
+      params.set("from_date", isoFrom);
+    }
+    if (toDate) {
+      const isoTo = new Date(toDate).toISOString();
+      params.set("to_date", isoTo);
+    }
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    // Mark this key as failed if rate limited or unauthorized
-    if (response.status === 429 || response.status === 401) {
-      failedApiKeys.add(apiKey);
-      console.warn(
-        `API key ${apiKey.slice(0, 8)}... marked as failed (status ${
-          response.status
-        })`
+    // Add cursor for pagination
+    if (cursor) {
+      params.set("cursor", cursor);
+    }
+
+    const url = `${MORALIS_API_BASE}/${address}/erc20/transfers?${params}`;
+
+    const response = await fetch(url, {
+      headers: {
+        "X-API-Key": apiKey,
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      // Mark this key as failed if rate limited or unauthorized
+      if (response.status === 429 || response.status === 401) {
+        failedApiKeys.add(apiKey);
+        console.warn(
+          `API key ${apiKey.slice(0, 8)}... marked as failed (status ${
+            response.status
+          })`
+        );
+      }
+      throw new Error(`Moralis API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const transfers: MoralisTransfer[] = data.result || [];
+
+    // Convert and add to all transfers
+    const converted = transfers.map((t) => ({
+      hash: t.transaction_hash,
+      from: t.from_address,
+      to: t.to_address,
+      value: t.value,
+      tokenDecimal: t.token_decimals || "18",
+      tokenSymbol: t.token_symbol || "UNKNOWN",
+      timeStamp: (new Date(t.block_timestamp).getTime() / 1000).toString(),
+      blockNumber: t.block_number,
+      contractAddress: t.address,
+    }));
+
+    allTransfers.push(...converted);
+    pageCount++;
+
+    // Get cursor for next page
+    cursor = data.cursor || null;
+
+    // Log progress for debugging
+    if (pageCount > 1 || cursor) {
+      console.log(
+        `[${address.slice(0, 8)}...] Page ${pageCount}: ${
+          transfers.length
+        } transfers (total: ${allTransfers.length})${
+          cursor ? ", more available" : ", done"
+        }`
       );
     }
-    throw new Error(`Moralis API error: ${response.status} - ${errorText}`);
-  }
 
-  const data = await response.json();
+    // Check limits
+    if (pageCount >= maxPages) {
+      console.log(
+        `[${address.slice(0, 8)}...] Reached max pages limit (${maxPages})`
+      );
+      break;
+    }
 
-  // Convert Moralis response to our TokenTransfer format
-  const transfers: MoralisTransfer[] = data.result || [];
+    if (allTransfers.length >= maxTransactions) {
+      console.log(
+        `[${address.slice(
+          0,
+          8
+        )}...] Reached max transactions limit (${maxTransactions})`
+      );
+      // Trim to exact limit
+      allTransfers.length = maxTransactions;
+      break;
+    }
 
-  return transfers.map((t) => ({
-    hash: t.transaction_hash,
-    from: t.from_address,
-    to: t.to_address,
-    value: t.value,
-    tokenDecimal: t.token_decimals || "18",
-    tokenSymbol: t.token_symbol || "UNKNOWN",
-    timeStamp: (new Date(t.block_timestamp).getTime() / 1000).toString(),
-    blockNumber: t.block_number,
-    contractAddress: t.address,
-  }));
+    // Small delay between pages to avoid rate limiting
+    if (cursor) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  } while (cursor);
+
+  return allTransfers;
 }
 
 /**
@@ -336,7 +407,8 @@ export async function fetchTokenTransfers(
   chain: keyof typeof CHAINS = "bsc",
   contractAddress?: string,
   fromDate?: string,
-  toDate?: string
+  toDate?: string,
+  paginationOptions?: PaginationOptions
 ): Promise<TokenTransfer[]> {
   const config = CHAINS[chain];
   if (!config) throw new Error(`Unknown chain: ${chain}`);
@@ -374,7 +446,8 @@ export async function fetchTokenTransfers(
         chain,
         contractAddress,
         fromDate,
-        toDate
+        toDate,
+        paginationOptions
       );
     } catch (err) {
       lastError = err as Error;
@@ -399,7 +472,8 @@ export async function fetchUSDTTransfers(
   apiKey: string,
   chain: keyof typeof CHAINS = "bsc",
   fromDate?: string,
-  toDate?: string
+  toDate?: string,
+  paginationOptions?: PaginationOptions
 ): Promise<TokenTransfer[]> {
   const config = CHAINS[chain];
   return fetchTokenTransfers(
@@ -408,7 +482,8 @@ export async function fetchUSDTTransfers(
     chain,
     config.usdtContract,
     fromDate,
-    toDate
+    toDate,
+    paginationOptions
   );
 }
 
@@ -443,7 +518,8 @@ export async function scanAddress(
   usdtOnly = true,
   useCache = true,
   fromDate?: string,
-  toDate?: string
+  toDate?: string,
+  paginationOptions?: PaginationOptions
 ): Promise<Transaction[]> {
   const config = CHAINS[chain];
   const tokenContract = usdtOnly ? config.usdtContract || null : null;
@@ -460,14 +536,22 @@ export async function scanAddress(
   // Cache miss - fetch from API with rate limiting
   return rateLimiter.schedule(async () => {
     const transfers = usdtOnly
-      ? await fetchUSDTTransfers(address, apiKey, chain, fromDate, toDate)
+      ? await fetchUSDTTransfers(
+          address,
+          apiKey,
+          chain,
+          fromDate,
+          toDate,
+          paginationOptions
+        )
       : await fetchTokenTransfers(
           address,
           apiKey,
           chain,
           undefined,
           fromDate,
-          toDate
+          toDate,
+          paginationOptions
         );
 
     // Save to cache only if strictly no date filter (full history)
@@ -497,6 +581,8 @@ export async function scanBulkAddresses(
     startLayer?: number;
     fromDate?: string;
     toDate?: string;
+    maxPages?: number;
+    maxTransactions?: number;
   } = {}
 ): Promise<BulkScanResult> {
   const {
@@ -508,7 +594,11 @@ export async function scanBulkAddresses(
     startLayer = 1,
     fromDate,
     toDate,
+    maxPages,
+    maxTransactions,
   } = options;
+
+  const paginationOptions: PaginationOptions = { maxPages, maxTransactions };
 
   const normalizedAddresses = [
     ...new Set(addresses.map((a) => a.toLowerCase().trim())),
@@ -564,7 +654,8 @@ export async function scanBulkAddresses(
         usdtOnly,
         useCache,
         fromDate,
-        toDate
+        toDate,
+        paginationOptions
       );
       allTransactions.push(...transactions);
       successCount++;
@@ -609,6 +700,8 @@ export async function scanMultipleLayers(
     onLayerComplete?: (layer: number, addresses: string[]) => void;
     fromDate?: string;
     toDate?: string;
+    maxPages?: number;
+    maxTransactions?: number;
   } = {}
 ): Promise<BulkScanResult> {
   const {
@@ -621,7 +714,11 @@ export async function scanMultipleLayers(
     onLayerComplete,
     fromDate,
     toDate,
+    maxPages,
+    maxTransactions,
   } = options;
+
+  const paginationOptions: PaginationOptions = { maxPages, maxTransactions };
 
   const allTransactions: Transaction[] = [];
   const layerMap = new Map<number, string[]>();
@@ -697,7 +794,8 @@ export async function scanMultipleLayers(
           usdtOnly,
           useCache,
           fromDate,
-          toDate
+          toDate,
+          paginationOptions
         );
         allTransactions.push(...transactions);
         successCount++;
