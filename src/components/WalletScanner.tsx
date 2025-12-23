@@ -99,6 +99,9 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
   const [maxPages, setMaxPages] = useState(10);
   const [maxTransactions, setMaxTransactions] = useState(1000);
 
+  // Token filter
+  const [usdtOnly, setUsdtOnly] = useState(true);
+
   const addresses = parseAddressInput(addressInput);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,7 +158,7 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
       if (scanMode === "multi-layer") {
         scanResult = await scanMultipleLayers(addresses, apiKey, {
           chain,
-          usdtOnly: true,
+          usdtOnly,
           useCache,
           controller,
           maxLayers,
@@ -171,7 +174,7 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
       } else {
         scanResult = await scanBulkAddresses(addresses, apiKey, {
           chain,
-          usdtOnly: true,
+          usdtOnly,
           useCache,
           controller,
           onProgress,
@@ -213,6 +216,7 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
     toDate,
     maxPages,
     maxTransactions,
+    usdtOnly,
     onDataLoaded,
   ]);
 
@@ -332,6 +336,28 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
               </option>
             ))}
           </select>
+
+          {/* USDT Only Toggle */}
+          <div className="flex items-center justify-between mt-3 p-2.5 bg-slate-900/50 rounded-lg">
+            <div>
+              <span className="text-sm text-white">USDT Only</span>
+              <p className="text-xs text-slate-500">
+                Filter for USDT transfers only
+              </p>
+            </div>
+            <button
+              onClick={() => setUsdtOnly(!usdtOnly)}
+              className={`relative w-12 h-6 rounded-full transition-colors ${
+                usdtOnly ? "bg-emerald-600" : "bg-slate-600"
+              }`}
+            >
+              <div
+                className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                  usdtOnly ? "left-7" : "left-1"
+                }`}
+              />
+            </button>
+          </div>
         </div>
 
         <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
