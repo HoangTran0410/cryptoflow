@@ -18,6 +18,9 @@ import {
   Eye,
   EyeOff,
   Calendar,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { Transaction } from "../types";
 import {
@@ -40,8 +43,15 @@ import {
   clearAllCache,
   clearCacheForAddress,
   CacheStats,
+  CacheStatsEntry,
+  exportCacheToFile,
+  importCacheFromFile,
+  clearSelectedCache,
+  exportSelectedCacheToFile,
 } from "../utils/walletCache";
 import { formatAddress } from "../utils/helpers";
+
+type SortDirection = "asc" | "desc" | null;
 
 interface WalletScannerProps {
   onDataLoaded: (data: Transaction[]) => void;
@@ -90,6 +100,13 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [clearAddressInput, setClearAddressInput] = useState("");
   const [showApiKeys, setShowApiKeys] = useState(false);
+
+  // Cache manager filtering/sorting/selection
+  const [cacheSearch, setCacheSearch] = useState("");
+  const [cacheSortDir, setCacheSortDir] = useState<SortDirection>("desc");
+  const [selectedCacheKeys, setSelectedCacheKeys] = useState<Set<string>>(
+    new Set()
+  );
 
   // Date range filter
   const [fromDate, setFromDate] = useState("");
@@ -854,6 +871,55 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
               </button>
             </div>
 
+            {/* Export & Import */}
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    await exportCacheToFile();
+                  } catch (err) {
+                    alert("Failed to export cache: " + (err as Error).message);
+                  }
+                }}
+                disabled={!cacheStats || cacheStats.totalEntries === 0}
+                className={`flex-1 px-3 py-2 text-sm rounded-lg flex items-center justify-center gap-2 transition-colors ${
+                  !cacheStats || cacheStats.totalEntries === 0
+                    ? "bg-slate-700 text-slate-500 cursor-not-allowed"
+                    : "bg-emerald-600 hover:bg-emerald-500 text-white"
+                }`}
+              >
+                <Download className="w-4 h-4" />
+                Export Cache
+              </button>
+              <label className="flex-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer">
+                <Upload className="w-4 h-4" />
+                Import Cache
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      try {
+                        const result = await importCacheFromFile(file);
+                        const stats = await getCacheStats();
+                        setCacheStats(stats);
+                        alert(
+                          `Import complete!\n✓ Imported: ${result.imported}\n⏭ Skipped: ${result.skipped}\n✗ Errors: ${result.errors}`
+                        );
+                      } catch (err) {
+                        alert(
+                          "Failed to import cache: " + (err as Error).message
+                        );
+                      }
+                    }
+                    e.target.value = ""; // Reset input
+                  }}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
             {/* Clear all & Refresh */}
             <div className="flex gap-2">
               <button
@@ -884,43 +950,223 @@ const WalletScanner: React.FC<WalletScannerProps> = ({ onDataLoaded }) => {
             </div>
 
             {/* Cache entries list */}
-            {cacheStats && cacheStats.entries.length > 0 && (
-              <div className="max-h-60 overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-slate-400 border-b border-slate-700">
-                      <th className="pb-2 pr-4">Address</th>
-                      <th className="pb-2 pr-4">Chain</th>
-                      <th className="pb-2 pr-4 text-right">TX</th>
-                      <th className="pb-2 text-right">Expires</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cacheStats.entries.slice(0, 20).map((entry, idx) => (
-                      <tr key={idx} className="border-b border-slate-800">
-                        <td className="py-2 pr-4 font-mono text-slate-300">
-                          <span className="copyable">
-                            {formatAddress(entry.address)}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-4 text-slate-400">
-                          {entry.chain.toUpperCase()}
-                        </td>
-                        <td className="py-2 pr-4 text-right text-indigo-400">
-                          {entry.txCount}
-                        </td>
-                        <td className="py-2 text-right text-slate-500 text-xs">
-                          {Math.round(
-                            (entry.expiresAt.getTime() - Date.now()) / 60000
-                          )}
-                          m left
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            {cacheStats &&
+              cacheStats.entries.length > 0 &&
+              (() => {
+                // Generate unique key for each entry
+                const getEntryKey = (entry: CacheStatsEntry) =>
+                  `${entry.address}-${entry.chain}-${entry.tokenContract}`;
+
+                // Filter entries by search
+                const filteredEntries = cacheStats.entries.filter((entry) => {
+                  if (!cacheSearch.trim()) return true;
+                  const search = cacheSearch.toLowerCase();
+                  return (
+                    entry.address.toLowerCase().includes(search) ||
+                    entry.chain.toLowerCase().includes(search)
+                  );
+                });
+
+                // Sort entries by txCount
+                const sortedEntries = [...filteredEntries].sort((a, b) => {
+                  if (cacheSortDir === "asc") return a.txCount - b.txCount;
+                  if (cacheSortDir === "desc") return b.txCount - a.txCount;
+                  return 0;
+                });
+
+                // Check if all filtered entries are selected
+                const allSelected =
+                  sortedEntries.length > 0 &&
+                  sortedEntries.every((e) =>
+                    selectedCacheKeys.has(getEntryKey(e))
+                  );
+
+                // Toggle single selection
+                const toggleSelection = (entry: CacheStatsEntry) => {
+                  const key = getEntryKey(entry);
+                  const newSet = new Set(selectedCacheKeys);
+                  if (newSet.has(key)) {
+                    newSet.delete(key);
+                  } else {
+                    newSet.add(key);
+                  }
+                  setSelectedCacheKeys(newSet);
+                };
+
+                // Toggle all selection
+                const toggleAllSelection = () => {
+                  if (allSelected) {
+                    setSelectedCacheKeys(new Set());
+                  } else {
+                    const newSet = new Set<string>();
+                    sortedEntries.forEach((e) => newSet.add(getEntryKey(e)));
+                    setSelectedCacheKeys(newSet);
+                  }
+                };
+
+                // Get selected entries for actions
+                const getSelectedEntries = () => {
+                  return sortedEntries.filter((e) =>
+                    selectedCacheKeys.has(getEntryKey(e))
+                  );
+                };
+
+                return (
+                  <div className="space-y-3">
+                    {/* Search & Selection Actions */}
+                    <div className="flex gap-2 items-center">
+                      <div className="flex-1 relative">
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <input
+                          type="text"
+                          value={cacheSearch}
+                          onChange={(e) => setCacheSearch(e.target.value)}
+                          placeholder="Search by address or chain..."
+                          className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:border-indigo-500 outline-none"
+                        />
+                      </div>
+                      {selectedCacheKeys.size > 0 && (
+                        <>
+                          <button
+                            onClick={async () => {
+                              const entries = getSelectedEntries();
+                              if (entries.length > 0) {
+                                try {
+                                  await exportSelectedCacheToFile(entries);
+                                } catch (err) {
+                                  alert(
+                                    "Failed to export: " +
+                                      (err as Error).message
+                                  );
+                                }
+                              }
+                            }}
+                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap"
+                          >
+                            <Download className="w-4 h-4" />
+                            Export ({selectedCacheKeys.size})
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const entries = getSelectedEntries();
+                              if (
+                                entries.length > 0 &&
+                                confirm(
+                                  `Delete ${entries.length} selected cache entries?`
+                                )
+                              ) {
+                                await clearSelectedCache(entries);
+                                setSelectedCacheKeys(new Set());
+                                const stats = await getCacheStats();
+                                setCacheStats(stats);
+                              }
+                            }}
+                            className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg flex items-center gap-2 transition-colors whitespace-nowrap"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete ({selectedCacheKeys.size})
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Table */}
+                    <div className="max-h-60 overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="sticky top-0 bg-slate-800">
+                          <tr className="text-left text-slate-400 border-b border-slate-700">
+                            <th className="pb-2 pr-2 w-8">
+                              <input
+                                type="checkbox"
+                                checked={allSelected}
+                                onChange={toggleAllSelection}
+                                className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer"
+                              />
+                            </th>
+                            <th className="pb-2 pr-4">Address</th>
+                            <th className="pb-2 pr-4">Chain</th>
+                            <th className="pb-2 pr-4 text-right">
+                              <button
+                                onClick={() => {
+                                  if (cacheSortDir === "desc")
+                                    setCacheSortDir("asc");
+                                  else if (cacheSortDir === "asc")
+                                    setCacheSortDir(null);
+                                  else setCacheSortDir("desc");
+                                }}
+                                className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                              >
+                                TX
+                                {cacheSortDir === "desc" && (
+                                  <ArrowDown className="w-3 h-3" />
+                                )}
+                                {cacheSortDir === "asc" && (
+                                  <ArrowUp className="w-3 h-3" />
+                                )}
+                                {cacheSortDir === null && (
+                                  <ArrowUpDown className="w-3 h-3" />
+                                )}
+                              </button>
+                            </th>
+                            <th className="pb-2 text-right">Cached</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedEntries.map((entry) => {
+                            const key = getEntryKey(entry);
+                            const isSelected = selectedCacheKeys.has(key);
+                            return (
+                              <tr
+                                key={key}
+                                className={`border-b border-slate-800 cursor-pointer transition-colors ${
+                                  isSelected
+                                    ? "bg-indigo-900/30"
+                                    : "hover:bg-slate-700/30"
+                                }`}
+                                onClick={() => toggleSelection(entry)}
+                              >
+                                <td className="py-2 pr-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleSelection(entry)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer"
+                                  />
+                                </td>
+                                <td className="py-2 pr-4 font-mono text-slate-300">
+                                  <span
+                                    className="copyable"
+                                    data-copy={entry.address}
+                                  >
+                                    {formatAddress(entry.address)}
+                                  </span>
+                                </td>
+                                <td className="py-2 pr-4 text-slate-400">
+                                  {entry.chain.toUpperCase()}
+                                </td>
+                                <td className="py-2 pr-4 text-right text-indigo-400">
+                                  {entry.txCount}
+                                </td>
+                                <td className="py-2 text-right text-slate-500 text-xs">
+                                  {entry.cachedAt.toLocaleDateString()}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <p className="text-xs text-slate-500 text-center">
+                      Showing {sortedEntries.length} of{" "}
+                      {cacheStats.entries.length} entries
+                      {selectedCacheKeys.size > 0 &&
+                        ` • ${selectedCacheKeys.size} selected`}
+                    </p>
+                  </div>
+                );
+              })()}
 
             {cacheStats && cacheStats.entries.length === 0 && (
               <p className="text-center text-slate-500 py-4">No cached data</p>
